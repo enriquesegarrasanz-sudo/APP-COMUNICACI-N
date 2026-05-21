@@ -1,0 +1,29 @@
+# Variables de entorno y secretos
+.env
+.env.local
+.env.production
+
+# Dependencias
+node_modules/
+
+# Build
+.next/
+out/
+build/
+
+# Datos locales generados por la app
+data/app.json
+data/transcripts/
+public/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+
+# QA artifacts
+.playwright-cli/
+output/playwright/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
