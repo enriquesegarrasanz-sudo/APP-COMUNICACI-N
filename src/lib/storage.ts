@@ -58,6 +58,7 @@ let databaseQueue = Promise.resolve();
 
 const allowedProviderKinds = new Set<AiProviderKind>([
   "openai",
+  "deepseek",
   "openai-compatible",
   "anthropic",
   "google",

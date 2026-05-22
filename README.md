@@ -38,6 +38,15 @@ OPENAI_API_KEY=tu_api_key
 OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
 ```
 
+### DeepSeek
+
+DeepSeek queda disponible como preset en `Conexiones IA` para analisis textual de transcripciones.
+Usa la clave en el servidor y deja la transcripcion con Whisper local u OpenAI.
+
+```env
+DEEPSEEK_API_KEY=tu_api_key
+```
+
 ### Google Drive Y Procesado
 
 La app procesa cada subida con `ffmpeg`: crea un MP4 comprimido para ver la sesion y un M4A ligero para transcribir. Si activas Drive en el panel `Drive y procesado`, el MP4 comprimido se sube a la carpeta configurada.
@@ -51,7 +60,9 @@ GOOGLE_DRIVE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY
 
 ### Conexiones IA
 
-La aplicacion incluye un panel `Conexiones IA` para configurar proveedor, base URL, endpoints, modo de autenticacion, variable de clave, modelo de transcripcion, modelo de analisis y contexto global de la app. OpenAI es solo el preset inicial: tambien puedes conectar APIs compatibles, proveedores mas economicos o un endpoint propio/proxy. Las claves no se guardan en el codigo: se leen desde `.env.local` usando el nombre de variable definido en el panel.
+La aplicacion incluye un panel `Conexiones IA` para configurar proveedor, base URL, endpoints, modo de autenticacion, variable de clave, modelo de transcripcion, modelo de analisis y contexto global de la app. OpenAI es solo el preset inicial: tambien puedes conectar DeepSeek, APIs compatibles, proveedores mas economicos o un endpoint propio/proxy. Las claves no se guardan en el codigo: se leen desde `.env.local` usando el nombre de variable definido en el panel.
+
+El preset DeepSeek usa `https://api.deepseek.com`, endpoint `chat/completions`, autenticacion `Bearer`, variable `DEEPSEEK_API_KEY` y modelo `deepseek-v4-flash` para coaching textual. La transcripcion queda desactivada por defecto en ese preset porque DeepSeek no aporta el endpoint de audio que usa esta app.
 
 Por seguridad, las escrituras por API solo aceptan peticiones desde `localhost` salvo que definas `APP_ALLOW_REMOTE_WRITE=true`. No actives esa variable en una app publicada sin poner autenticacion delante.
 

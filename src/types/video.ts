@@ -2,7 +2,14 @@ export type TranscriptStatus = "idle" | "processing" | "ready" | "error";
 
 export type TranscriptionProvider = "local" | "openai" | "ai-api";
 
-export type AiProviderKind = "openai" | "openai-compatible" | "anthropic" | "google" | "mistral" | "custom";
+export type AiProviderKind =
+  | "openai"
+  | "deepseek"
+  | "openai-compatible"
+  | "anthropic"
+  | "google"
+  | "mistral"
+  | "custom";
 
 export type AiAuthMode = "bearer" | "x-api-key" | "query-key" | "none";
 

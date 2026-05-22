@@ -17,9 +17,10 @@ En `Environment Variables`, pulsa `Import .env` y usa el archivo `.env.vercel.ex
 OPENAI_API_KEY=
 OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
 OPENAI_ANALYSIS_MODEL=gpt-5-nano
+DEEPSEEK_API_KEY=
 ```
 
-Rellena `OPENAI_API_KEY` directamente en Vercel con tu clave real. No la guardes en GitHub.
+Rellena `OPENAI_API_KEY` o `DEEPSEEK_API_KEY` directamente en Vercel con tu clave real. No la guardes en GitHub.
 
 No importes `WHISPER_COMMAND` ni `WHISPER_MODEL` en Vercel: Whisper local solo funciona en tu ordenador porque depende de un binario instalado en la maquina.
 

@@ -7,6 +7,13 @@ type ChatCompletionPayload = {
   choices?: Array<{ message?: { content?: string } }>;
 };
 
+type ChatCompletionRequest = {
+  model: string;
+  messages: ReturnType<typeof buildAnalysisPrompt>;
+  response_format: { type: "json_object" };
+  thinking?: { type: "disabled" };
+};
+
 type AnthropicPayload = {
   content?: Array<{ text?: string; type?: string }>;
 };
@@ -198,17 +205,23 @@ export async function getAiCoachNotes(entry: VideoEntry, analysis: AnalysisResul
     return content ? parseNotes(content) : null;
   }
 
+  const requestBody: ChatCompletionRequest = {
+    model: settings.analysisModel,
+    messages,
+    response_format: { type: "json_object" },
+  };
+
+  if (settings.providerKind === "deepseek") {
+    requestBody.thinking = { type: "disabled" };
+  }
+
   const response = await fetch(apiUrl(settings, settings.chatEndpoint, apiKey), {
     method: "POST",
     headers: {
       ...authorizationHeaders(settings, apiKey),
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: settings.analysisModel,
-      messages,
-      response_format: { type: "json_object" },
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {

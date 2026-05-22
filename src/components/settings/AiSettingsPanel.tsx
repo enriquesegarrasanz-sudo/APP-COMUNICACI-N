@@ -43,6 +43,21 @@ const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
     transcriptionEnabled: true,
     transcriptAnalysisEnabled: true,
   },
+  deepseek: {
+    providerName: "DeepSeek",
+    baseUrl: "https://api.deepseek.com",
+    chatEndpoint: "chat/completions",
+    transcriptionEndpoint: "audio/transcriptions",
+    authMode: "bearer",
+    apiKeyEnvVar: "DEEPSEEK_API_KEY",
+    apiKeyQueryParam: "key",
+    transcriptionModel: "no-disponible",
+    analysisModel: "deepseek-v4-flash",
+    visionModel: "deepseek-v4-flash",
+    transcriptionEnabled: false,
+    transcriptAnalysisEnabled: true,
+    videoAnalysisEnabled: false,
+  },
   "openai-compatible": {
     providerName: "API compatible",
     baseUrl: "https://api.tu-proveedor.com/v1",
@@ -114,6 +129,7 @@ const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
 
 const providerLabels: Array<{ value: AiProviderKind; label: string }> = [
   { value: "openai", label: "OpenAI" },
+  { value: "deepseek", label: "DeepSeek" },
   { value: "openai-compatible", label: "API compatible" },
   { value: "anthropic", label: "Anthropic" },
   { value: "google", label: "Google AI" },
