@@ -1,10 +1,40 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { AppDatabase, VideoEntry } from "@/types/video";
+import type { AiProviderKind, AiSettings, AiSettingsStatus, AppDatabase, VideoEntry } from "@/types/video";
 
 const dataDir = path.join(process.cwd(), "data");
 const uploadDir = path.join(process.cwd(), "public", "uploads");
 const appFile = path.join(dataDir, "app.json");
+
+export const defaultApplicationContext =
+  "APP SPEAKING es una aplicacion local para entrenar comunicacion frente a camara. " +
+  "La IA debe ayudar a transcribir de forma fiel, conservar muletillas y pausas habladas, " +
+  "analizar claridad, estructura, ritmo, repeticiones, muletillas, cierre, intencion, " +
+  "lenguaje corporal solo cuando existan observaciones o vision conectada, y devolver consejos breves, concretos y accionables.";
+
+export const defaultAiSettings: AiSettings = {
+  providerKind: "openai",
+  providerName: "OpenAI",
+  baseUrl: "https://api.openai.com/v1",
+  apiKeyEnvVar: "OPENAI_API_KEY",
+  transcriptionModel: "gpt-4o-mini-transcribe",
+  analysisModel: "gpt-5.4-nano",
+  visionModel: "gpt-5.4-nano",
+  transcriptionEnabled: true,
+  transcriptAnalysisEnabled: true,
+  videoAnalysisEnabled: false,
+  historyContextEnabled: true,
+  applicationContext: defaultApplicationContext,
+};
+
+const allowedProviderKinds = new Set<AiProviderKind>([
+  "openai",
+  "openai-compatible",
+  "anthropic",
+  "google",
+  "mistral",
+  "custom",
+]);
 
 async function ensureStore() {
   await fs.mkdir(dataDir, { recursive: true });
@@ -13,8 +43,46 @@ async function ensureStore() {
   try {
     await fs.access(appFile);
   } catch {
-    await fs.writeFile(appFile, JSON.stringify({ videos: [] }, null, 2), "utf8");
+    await fs.writeFile(
+      appFile,
+      JSON.stringify({ videos: [], aiSettings: defaultAiSettings }, null, 2),
+      "utf8",
+    );
   }
+}
+
+function stringOrDefault(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function booleanOrDefault(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizeAiSettings(value: unknown): AiSettings {
+  const input = value && typeof value === "object" ? (value as Partial<AiSettings>) : {};
+  const providerKind = allowedProviderKinds.has(input.providerKind as AiProviderKind)
+    ? (input.providerKind as AiProviderKind)
+    : defaultAiSettings.providerKind;
+
+  return {
+    providerKind,
+    providerName: stringOrDefault(input.providerName, defaultAiSettings.providerName),
+    baseUrl: stringOrDefault(input.baseUrl, defaultAiSettings.baseUrl).replace(/\/+$/, ""),
+    apiKeyEnvVar: stringOrDefault(input.apiKeyEnvVar, defaultAiSettings.apiKeyEnvVar),
+    transcriptionModel: stringOrDefault(input.transcriptionModel, defaultAiSettings.transcriptionModel),
+    analysisModel: stringOrDefault(input.analysisModel, defaultAiSettings.analysisModel),
+    visionModel: stringOrDefault(input.visionModel, defaultAiSettings.visionModel),
+    transcriptionEnabled: booleanOrDefault(input.transcriptionEnabled, defaultAiSettings.transcriptionEnabled),
+    transcriptAnalysisEnabled: booleanOrDefault(
+      input.transcriptAnalysisEnabled,
+      defaultAiSettings.transcriptAnalysisEnabled,
+    ),
+    videoAnalysisEnabled: booleanOrDefault(input.videoAnalysisEnabled, defaultAiSettings.videoAnalysisEnabled),
+    historyContextEnabled: booleanOrDefault(input.historyContextEnabled, defaultAiSettings.historyContextEnabled),
+    applicationContext: stringOrDefault(input.applicationContext, defaultAiSettings.applicationContext),
+    updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : undefined,
+  };
 }
 
 async function readDatabase(): Promise<AppDatabase> {
@@ -22,10 +90,13 @@ async function readDatabase(): Promise<AppDatabase> {
   const raw = await fs.readFile(appFile, "utf8");
 
   try {
-    const parsed = JSON.parse(raw) as AppDatabase;
-    return { videos: Array.isArray(parsed.videos) ? parsed.videos : [] };
+    const parsed = JSON.parse(raw) as Partial<AppDatabase>;
+    return {
+      videos: Array.isArray(parsed.videos) ? parsed.videos : [],
+      aiSettings: normalizeAiSettings(parsed.aiSettings),
+    };
   } catch {
-    return { videos: [] };
+    return { videos: [], aiSettings: defaultAiSettings };
   }
 }
 
@@ -66,6 +137,33 @@ function parseTags(value: string | null) {
 export async function listVideoEntries() {
   const database = await readDatabase();
   return database.videos.toSorted((a, b) => b.numero - a.numero);
+}
+
+export async function getAiSettings() {
+  const database = await readDatabase();
+  return database.aiSettings;
+}
+
+export async function getAiSettingsStatus(): Promise<AiSettingsStatus> {
+  const settings = await getAiSettings();
+
+  return {
+    ...settings,
+    apiKeyConfigured: Boolean(settings.apiKeyEnvVar && process.env[settings.apiKeyEnvVar]),
+  };
+}
+
+export async function updateAiSettings(patch: Partial<AiSettings>) {
+  const database = await readDatabase();
+  const next = normalizeAiSettings({
+    ...database.aiSettings,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  });
+
+  database.aiSettings = next;
+  await writeDatabase(database);
+  return next;
 }
 
 export async function getVideoEntry(id: string) {

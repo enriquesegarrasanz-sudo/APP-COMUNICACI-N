@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { analyzeTranscript, getAiCoachNotes } from "@/lib/analysis";
-import { getVideoEntry, updateVideoEntry } from "@/lib/storage";
+import { getAiCoachNotes } from "@/lib/ai-api";
+import { analyzeTranscript } from "@/lib/analysis";
+import { getAiSettings, getVideoEntry, updateVideoEntry } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,8 @@ export async function POST(request: Request) {
 
   try {
     const analysis = analyzeTranscript(entry.transcript);
-    const aiCoachNotes = body.useAi ? await getAiCoachNotes(entry.transcript) : entry.aiCoachNotes;
+    const settings = await getAiSettings();
+    const aiCoachNotes = body.useAi ? await getAiCoachNotes(entry, analysis, settings) : entry.aiCoachNotes;
     const updated = await updateVideoEntry(entry.id, {
       analysis,
       aiCoachNotes: aiCoachNotes ?? entry.aiCoachNotes,
@@ -38,4 +40,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

@@ -50,10 +50,12 @@ svg {
 .side-rail {
   display: flex;
   min-height: 100vh;
+  max-height: 100vh;
   flex-direction: column;
   gap: var(--camera-space-5);
   border-right: 1px solid var(--camera-line);
   background: rgba(247, 251, 255, 0.82);
+  overflow: auto;
   padding: var(--camera-space-6);
 }
 
@@ -79,6 +81,8 @@ svg {
 .topline h1,
 .detail-header h1,
 .section-heading h2,
+.overview-heading h2,
+.board-heading h2,
 .form-heading h2,
 .list-heading h2,
 .surface-title h2 {
@@ -112,7 +116,9 @@ svg {
 
 .topline p,
 .detail-header p,
-.section-heading p {
+.section-heading p,
+.overview-heading p,
+.board-heading p {
   margin: 0 0 var(--camera-space-1);
   color: var(--camera-blue-deep);
   font-size: 0.86rem;
@@ -120,7 +126,7 @@ svg {
 }
 
 .topline h1 {
-  font-size: clamp(2rem, 4vw, 4.3rem);
+  font-size: clamp(1.9rem, 3vw, 3.2rem);
   line-height: 1;
 }
 
@@ -153,6 +159,8 @@ svg {
 .list-heading,
 .surface-title,
 .section-heading,
+.overview-heading,
+.board-heading,
 .panel-title {
   display: flex;
   align-items: center;
@@ -282,6 +290,142 @@ select:focus {
 .toolbar-controls select {
   width: auto;
   min-width: 150px;
+}
+
+.overview-panel,
+.session-board {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--camera-space-4);
+}
+
+.overview-heading,
+.board-heading {
+  justify-content: space-between;
+}
+
+.overview-heading h2,
+.board-heading h2 {
+  font-size: clamp(1.25rem, 2vw, 1.8rem);
+}
+
+.overview-heading svg,
+.board-heading svg {
+  color: var(--camera-cyan);
+}
+
+.classifier-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: var(--camera-space-3);
+  align-items: stretch;
+}
+
+.classifier-group,
+.control-grid {
+  border: 1px solid var(--camera-line);
+  border-radius: var(--camera-radius-md);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.classifier-group {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--camera-space-2);
+  padding: var(--camera-space-2);
+}
+
+.classifier-chip {
+  display: grid;
+  min-height: 66px;
+  align-content: center;
+  gap: var(--camera-space-1);
+  border: 1px solid transparent;
+  border-radius: var(--camera-radius-sm);
+  background: transparent;
+  color: var(--camera-ink-soft);
+  padding: var(--camera-space-2);
+}
+
+.classifier-chip:hover,
+.classifier-chip.is-active {
+  border-color: var(--camera-line);
+  background: var(--camera-paper-strong);
+  color: var(--camera-blue-deep);
+}
+
+.classifier-chip span,
+.classifier-chip strong {
+  overflow-wrap: anywhere;
+}
+
+.classifier-chip span {
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.classifier-chip strong {
+  font-family: var(--camera-font-mono);
+  font-size: 1.15rem;
+}
+
+.control-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px 150px;
+  gap: var(--camera-space-2);
+  padding: var(--camera-space-3);
+}
+
+.control-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--camera-space-2);
+  color: var(--camera-ink-soft);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.control-field span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--camera-space-1);
+}
+
+.control-field input,
+.control-field select {
+  min-height: 40px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--camera-space-3);
+}
+
+.pattern-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.9fr) minmax(220px, 0.7fr);
+  gap: var(--camera-space-3);
+}
+
+.signal-panel {
+  justify-content: center;
+}
+
+.reading-score {
+  color: var(--camera-blue-deep);
+  font-family: var(--camera-font-mono);
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.signal-panel p,
+.signal-panel small {
+  margin: 0;
+  color: var(--camera-ink-muted);
+  font-weight: 700;
 }
 
 .session-list {
@@ -773,4 +917,3 @@ select:focus {
     padding: var(--camera-space-4);
   }
 }
-

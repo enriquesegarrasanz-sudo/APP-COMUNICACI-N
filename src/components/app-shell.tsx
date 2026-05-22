@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { Camera, Waves } from "lucide-react";
-import { GlobalReport } from "@/components/dashboard/GlobalReport";
-import { SessionList } from "@/components/dashboard/SessionList";
-import { SummaryStrip } from "@/components/dashboard/SummaryStrip";
+import {
+  DashboardOverview,
+  type SessionClassifier,
+  type SessionSort,
+} from "@/components/dashboard/DashboardOverview";
+import { SessionBoard } from "@/components/dashboard/SessionBoard";
 import { NewSessionForm } from "@/components/video-form/NewSessionForm";
 import { SessionDetail } from "@/components/video-detail/SessionDetail";
 import type { VideoEntry } from "@/types/video";
@@ -13,9 +16,82 @@ function sortVideos(videos: VideoEntry[]) {
   return [...videos].sort((a, b) => b.numero - a.numero);
 }
 
+function getInitialSelectedId(videos: VideoEntry[]) {
+  return sortVideos(videos)[0]?.id ?? null;
+}
+
+function matchesClassifier(video: VideoEntry, classifier: SessionClassifier) {
+  if (classifier === "analyzed") {
+    return Boolean(video.analysis);
+  }
+
+  if (classifier === "needs-analysis") {
+    return !video.analysis;
+  }
+
+  if (classifier === "ready") {
+    return video.transcriptStatus === "ready";
+  }
+
+  if (classifier === "error") {
+    return video.transcriptStatus === "error";
+  }
+
+  return true;
+}
+
+function sortByMode(videos: VideoEntry[], sort: SessionSort) {
+  const sorted = [...videos];
+
+  if (sort === "oldest") {
+    return sorted.sort((a, b) => a.numero - b.numero);
+  }
+
+  if (sort === "clarity") {
+    return sorted.sort((a, b) => (b.analysis?.clarityScore ?? -1) - (a.analysis?.clarityScore ?? -1));
+  }
+
+  if (sort === "fillers") {
+    return sorted.sort((a, b) => (b.analysis?.fillerTotal ?? -1) - (a.analysis?.fillerTotal ?? -1));
+  }
+
+  return sorted.sort((a, b) => b.numero - a.numero);
+}
+
 export default function AppShell({ initialVideos }: { initialVideos: VideoEntry[] }) {
   const [videos, setVideos] = useState(() => sortVideos(initialVideos));
-  const [selectedId, setSelectedId] = useState<string | null>(initialVideos[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => getInitialSelectedId(initialVideos));
+  const [query, setQuery] = useState("");
+  const [classifier, setClassifier] = useState<SessionClassifier>("all");
+  const [tagFilter, setTagFilter] = useState("all");
+  const [sort, setSort] = useState<SessionSort>("newest");
+
+  const availableTags = useMemo(
+    () => [...new Set(videos.flatMap((video) => video.etiquetas))].sort((a, b) => a.localeCompare(b)),
+    [videos],
+  );
+
+  const filteredVideos = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const visible = videos.filter((video) => {
+      const searchable = [
+        video.titulo,
+        video.tema,
+        video.fecha,
+        video.transcriptStatus,
+        ...video.etiquetas,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      const matchesSearch = normalizedQuery.length === 0 || searchable.includes(normalizedQuery);
+      const matchesTag = tagFilter === "all" || video.etiquetas.includes(tagFilter);
+
+      return matchesSearch && matchesTag && matchesClassifier(video, classifier);
+    });
+
+    return sortByMode(visible, sort);
+  }, [classifier, query, sort, tagFilter, videos]);
 
   const selected = useMemo(
     () => videos.find((video) => video.id === selectedId) ?? videos[0] ?? null,
@@ -32,6 +108,9 @@ export default function AppShell({ initialVideos }: { initialVideos: VideoEntry[
       return sortVideos(next);
     });
     setSelectedId(entry.id);
+    setQuery("");
+    setClassifier("all");
+    setTagFilter("all");
   }
 
   function removeEntry(id: string) {
@@ -56,7 +135,6 @@ export default function AppShell({ initialVideos }: { initialVideos: VideoEntry[
         </div>
 
         <NewSessionForm onCreated={upsertEntry} />
-        <SessionList videos={videos} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
       </aside>
 
       <section className="workspace">
@@ -68,14 +146,30 @@ export default function AppShell({ initialVideos }: { initialVideos: VideoEntry[
           <Waves aria-hidden="true" size={28} />
         </header>
 
-        <SummaryStrip videos={videos} />
+        <DashboardOverview
+          availableTags={availableTags}
+          classifier={classifier}
+          query={query}
+          selectedTag={tagFilter}
+          sort={sort}
+          videos={videos}
+          visibleCount={filteredVideos.length}
+          onClassifierChange={setClassifier}
+          onQueryChange={setQuery}
+          onSortChange={setSort}
+          onTagChange={setTagFilter}
+        />
+        <SessionBoard
+          selectedId={selected?.id ?? null}
+          videos={filteredVideos}
+          onSelect={setSelectedId}
+        />
         <SessionDetail
           key={selected?.id ?? "empty-session"}
           video={selected}
           onDelete={removeEntry}
           onEntryChange={upsertEntry}
         />
-        <GlobalReport videos={videos} />
       </section>
     </main>
   );

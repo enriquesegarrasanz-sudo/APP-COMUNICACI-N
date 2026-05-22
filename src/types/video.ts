@@ -1,6 +1,28 @@
 export type TranscriptStatus = "idle" | "processing" | "ready" | "error";
 
-export type TranscriptionProvider = "local" | "openai";
+export type TranscriptionProvider = "local" | "openai" | "ai-api";
+
+export type AiProviderKind = "openai" | "openai-compatible" | "anthropic" | "google" | "mistral" | "custom";
+
+export type AiSettings = {
+  providerKind: AiProviderKind;
+  providerName: string;
+  baseUrl: string;
+  apiKeyEnvVar: string;
+  transcriptionModel: string;
+  analysisModel: string;
+  visionModel: string;
+  transcriptionEnabled: boolean;
+  transcriptAnalysisEnabled: boolean;
+  videoAnalysisEnabled: boolean;
+  historyContextEnabled: boolean;
+  applicationContext: string;
+  updatedAt?: string;
+};
+
+export type AiSettingsStatus = AiSettings & {
+  apiKeyConfigured: boolean;
+};
 
 export type FillerCount = {
   phrase: string;
@@ -59,5 +81,5 @@ export type VideoEntry = {
 
 export type AppDatabase = {
   videos: VideoEntry[];
+  aiSettings: AiSettings;
 };
-

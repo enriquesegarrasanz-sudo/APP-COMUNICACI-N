@@ -1,0 +1,13 @@
+.env
+.env.local
+.env.production
+
+data/app.json
+data/transcripts/
+public/uploads/
+
+.next/
+node_modules/
+output/
+.playwright-cli/
+*.log

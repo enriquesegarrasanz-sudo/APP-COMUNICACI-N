@@ -1,15 +1,16 @@
 import type { TranscriptionProvider, VideoEntry } from "@/types/video";
+import { transcribeWithConfiguredAi } from "@/lib/ai-api";
+import { getAiSettings } from "@/lib/storage";
 import { getVideoAbsolutePath } from "@/lib/storage";
 import { transcribeWithLocalWhisper } from "@/lib/transcribers/localWhisper";
-import { transcribeWithOpenAI } from "@/lib/transcribers/openai";
 
 export async function transcribeEntry(entry: VideoEntry, provider: TranscriptionProvider) {
   const filePath = getVideoAbsolutePath(entry);
 
-  if (provider === "openai") {
-    return transcribeWithOpenAI(filePath);
+  if (provider === "openai" || provider === "ai-api") {
+    const settings = await getAiSettings();
+    return transcribeWithConfiguredAi(filePath, settings);
   }
 
   return transcribeWithLocalWhisper(filePath);
 }
-
