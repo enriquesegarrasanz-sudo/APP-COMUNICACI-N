@@ -2,20 +2,24 @@
 
 import { useState } from "react";
 import {
+  BarChart3,
   Brain,
   FileText,
+  ListChecks,
   LoaderCircle,
   Mic2,
   PenLine,
   RefreshCw,
+  Repeat2,
   Save,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import { StatusPill } from "@/components/ui/StatusPill";
-import type { TranscriptionProvider, VideoEntry } from "@/types/video";
+import type { AiSettingsStatus, TranscriptionProvider, VideoEntry } from "@/types/video";
 
 type Props = {
+  aiSettings: AiSettingsStatus;
   video: VideoEntry | null;
   onEntryChange: (entry: VideoEntry) => void;
   onDelete: (id: string) => void;
@@ -57,9 +61,11 @@ function toDraft(video: VideoEntry | null): Draft {
   };
 }
 
-export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
+export function SessionDetail({ aiSettings, video, onEntryChange, onDelete }: Props) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(video));
-  const [provider, setProvider] = useState<TranscriptionProvider>("local");
+  const [provider, setProvider] = useState<TranscriptionProvider>(
+    aiSettings.apiKeyConfigured && aiSettings.transcriptionEnabled ? "ai-api" : "local",
+  );
   const [useAi, setUseAi] = useState(false);
   const [saving, setSaving] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -76,6 +82,15 @@ export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
   }
 
   const currentVideo = video;
+  const aiTranscriptionReady = aiSettings.apiKeyConfigured && aiSettings.transcriptionEnabled;
+  const aiAnalysisReady = aiSettings.apiKeyConfigured && aiSettings.transcriptAnalysisEnabled;
+  const transcribeDisabled = transcribing || (provider === "ai-api" && !aiTranscriptionReady);
+  const analyzeDisabled = analyzing || !draft.transcript.trim() || (useAi && !aiAnalysisReady);
+  const messageIsError =
+    message.includes("No se pudo") ||
+    message.includes("Falta") ||
+    message.includes("fallo") ||
+    message.includes("desactiv");
 
   function updateDraft<Key extends keyof Draft>(key: Key, value: Draft[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -130,7 +145,7 @@ export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
 
       onEntryChange(payload.entry);
       setDraft(toDraft(payload.entry));
-      setMessage("Transcripcion lista.");
+      setMessage("Transcripcion y analisis base listos.");
     } catch (error) {
       if (error instanceof Error) {
         setMessage(error.message);
@@ -154,7 +169,7 @@ export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: currentVideo.id, useAi }),
+        body: JSON.stringify({ id: currentVideo.id, useAi: useAi && aiAnalysisReady }),
       });
       const payload = (await response.json()) as { entry?: VideoEntry; error?: string };
 
@@ -258,9 +273,11 @@ export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
           <div className="toolbar-controls">
             <select value={provider} onChange={(event) => setProvider(event.target.value as TranscriptionProvider)}>
               <option value="local">Whisper local</option>
-              <option value="openai">OpenAI API</option>
+              <option disabled={!aiTranscriptionReady} value="ai-api">
+                {aiSettings.providerName} API
+              </option>
             </select>
-            <button className="secondary-action" disabled={transcribing} onClick={transcribe} type="button">
+            <button className="secondary-action" disabled={transcribeDisabled} onClick={transcribe} type="button">
               {transcribing ? (
                 <LoaderCircle aria-hidden="true" size={17} />
               ) : (
@@ -270,6 +287,12 @@ export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
             </button>
           </div>
         </div>
+
+        {provider === "ai-api" && !aiTranscriptionReady ? (
+          <p className="inline-error">
+            Activa transcripcion API y configura {aiSettings.apiKeyEnvVar} en Conexiones IA.
+          </p>
+        ) : null}
 
         <textarea
           className="transcript-area"
@@ -286,17 +309,25 @@ export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
           </div>
           <div className="toolbar-controls">
             <label className="ai-toggle">
-              <input checked={useAi} type="checkbox" onChange={(event) => setUseAi(event.target.checked)} />
-              IA
+              <input
+                checked={useAi && aiAnalysisReady}
+                disabled={!aiAnalysisReady}
+                type="checkbox"
+                onChange={(event) => setUseAi(event.target.checked)}
+              />
+              {aiSettings.providerName}
             </label>
-            <button className="primary-action" disabled={analyzing || !draft.transcript.trim()} onClick={analyze} type="button">
+            <button className="primary-action" disabled={analyzeDisabled} onClick={analyze} type="button">
               {analyzing ? <LoaderCircle aria-hidden="true" size={17} /> : <Sparkles aria-hidden="true" size={17} />}
               Analizar
             </button>
           </div>
         </div>
 
-        {message ? <p className="inline-message">{message}</p> : null}
+        {!aiAnalysisReady ? (
+          <p className="empty-line">El analisis local funciona siempre. Para coaching IA, configura {aiSettings.apiKeyEnvVar}.</p>
+        ) : null}
+        {message ? <p className={messageIsError ? "inline-error" : "inline-message"}>{message}</p> : null}
         {currentVideo.transcriptError ? <p className="inline-error">{currentVideo.transcriptError}</p> : null}
 
         {analysis ? (
@@ -304,11 +335,14 @@ export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
             <article className="score-panel">
               <span>Claridad</span>
               <strong>{analysis.clarityScore}%</strong>
-              <small>{analysis.wordCount} palabras</small>
+              <small>{analysis.wordCount} palabras - {analysis.sentenceCount} frases</small>
             </article>
 
             <article className="analysis-panel">
-              <h3>Muletillas</h3>
+              <h3>
+                <BarChart3 aria-hidden="true" size={16} />
+                Muletillas
+              </h3>
               <div className="filler-stack">
                 {analysis.topFillers.length === 0 ? (
                   <p className="empty-line">No detectadas.</p>
@@ -317,6 +351,7 @@ export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
                     <div className="filler-row" key={filler.phrase}>
                       <span>{filler.phrase}</span>
                       <strong>{filler.count}</strong>
+                      <small>{filler.perThousandWords}/1000</small>
                     </div>
                   ))
                 )}
@@ -324,13 +359,67 @@ export function SessionDetail({ video, onEntryChange, onDelete }: Props) {
             </article>
 
             <article className="analysis-panel">
+              <h3>
+                <ListChecks aria-hidden="true" size={16} />
+                Ritmo verbal
+              </h3>
+              <div className="metric-stack">
+                <div>
+                  <span>Muletillas / 1000 palabras</span>
+                  <strong>{analysis.fillerRate}</strong>
+                </div>
+                <div>
+                  <span>Total de muletillas</span>
+                  <strong>{analysis.fillerTotal}</strong>
+                </div>
+              </div>
+            </article>
+
+            <article className="analysis-panel">
               <h3>Estructura</h3>
               <div className="signal-list">
                 {analysis.structureSignals.map((signal) => (
-                  <span className={signal.count > 0 ? "is-on" : ""} key={signal.name}>
-                    {signal.name}
-                  </span>
+                  <div className={signal.count > 0 ? "structure-row is-on" : "structure-row"} key={signal.name}>
+                    <span>{signal.name}</span>
+                    <strong>{signal.count}</strong>
+                    <small>{signal.examples.length > 0 ? signal.examples.join(", ") : "sin senales"}</small>
+                  </div>
                 ))}
+              </div>
+            </article>
+
+            <article className="analysis-panel">
+              <h3>
+                <Repeat2 aria-hidden="true" size={16} />
+                Repeticiones
+              </h3>
+              <div className="filler-stack">
+                {analysis.repeatedTerms.length === 0 ? (
+                  <p className="empty-line">Sin terminos dominantes.</p>
+                ) : (
+                  analysis.repeatedTerms.map((term) => (
+                    <div className="filler-row" key={term.term}>
+                      <span>{term.term}</span>
+                      <strong>{term.count}</strong>
+                    </div>
+                  ))
+                )}
+              </div>
+            </article>
+
+            <article className="analysis-panel">
+              <h3>Frases repetidas</h3>
+              <div className="filler-stack">
+                {analysis.repeatedPhrases.length === 0 ? (
+                  <p className="empty-line">No hay bucles claros.</p>
+                ) : (
+                  analysis.repeatedPhrases.map((phrase) => (
+                    <div className="filler-row" key={phrase.term}>
+                      <span>{phrase.term}</span>
+                      <strong>{phrase.count}</strong>
+                    </div>
+                  ))
+                )}
               </div>
             </article>
 

@@ -42,7 +42,9 @@ Al importar el repositorio desde GitHub, Vercel crea despliegues automaticamente
 
 ## Aviso Importante Sobre Videos
 
-La version actual guarda datos en `data/app.json` y videos en `public/uploads/`. Eso funciona bien en local, pero Vercel Functions tienen filesystem de solo lectura salvo `/tmp`, y las peticiones a Functions tienen limite de payload. Para usar la app como web app real en tablet con videos persistentes hay que migrar:
+La version actual guarda datos en `data/app.json` y videos en `public/uploads/`. Eso funciona bien en local, pero Vercel Functions tienen filesystem de solo lectura salvo `/tmp`, y las peticiones a Functions tienen limite de payload. Ademas, la API de transcripcion de OpenAI tiene limite de archivo, asi que los videos largos deben subirse a almacenamiento externo y/o convertirse a audio comprimido antes de transcribir.
+
+Para usar la app como web app real en tablet con videos persistentes hay que migrar:
 
 - Metadatos y transcripciones: Postgres, Supabase, Neon o similar.
 - Videos/audio: Vercel Blob o almacenamiento tipo S3.

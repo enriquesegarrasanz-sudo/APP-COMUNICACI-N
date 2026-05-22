@@ -18,8 +18,8 @@ export const defaultAiSettings: AiSettings = {
   baseUrl: "https://api.openai.com/v1",
   apiKeyEnvVar: "OPENAI_API_KEY",
   transcriptionModel: "gpt-4o-mini-transcribe",
-  analysisModel: "gpt-5.4-nano",
-  visionModel: "gpt-5.4-nano",
+  analysisModel: "gpt-5-nano",
+  visionModel: "gpt-5-nano",
   transcriptionEnabled: true,
   transcriptAnalysisEnabled: true,
   videoAnalysisEnabled: false,
@@ -155,9 +155,12 @@ export async function getAiSettingsStatus(): Promise<AiSettingsStatus> {
 
 export async function updateAiSettings(patch: Partial<AiSettings>) {
   const database = await readDatabase();
+  const definedPatch = Object.fromEntries(
+    Object.entries(patch).filter(([, value]) => value !== undefined),
+  ) as Partial<AiSettings>;
   const next = normalizeAiSettings({
     ...database.aiSettings,
-    ...patch,
+    ...definedPatch,
     updatedAt: new Date().toISOString(),
   });
 

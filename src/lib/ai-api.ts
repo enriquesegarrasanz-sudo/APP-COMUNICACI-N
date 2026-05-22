@@ -20,7 +20,7 @@ function requireApiKey(settings: AiSettings) {
   return apiKey;
 }
 
-function authorizationHeaders(settings: AiSettings, apiKey: string) {
+function authorizationHeaders(settings: AiSettings, apiKey: string): Record<string, string> {
   if (settings.providerKind === "anthropic") {
     return {
       "anthropic-version": "2023-06-01",

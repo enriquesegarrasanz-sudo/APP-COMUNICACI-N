@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import {
   AlertCircle,
   BrainCircuit,
@@ -27,8 +28,8 @@ const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
     baseUrl: "https://api.openai.com/v1",
     apiKeyEnvVar: "OPENAI_API_KEY",
     transcriptionModel: "gpt-4o-mini-transcribe",
-    analysisModel: "gpt-5.4-nano",
-    visionModel: "gpt-5.4-nano",
+    analysisModel: "gpt-5-nano",
+    visionModel: "gpt-5-nano",
     transcriptionEnabled: true,
     transcriptAnalysisEnabled: true,
   },
@@ -99,7 +100,7 @@ function ToggleRow({
 }: {
   checked: boolean;
   helper: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   onChange: (checked: boolean) => void;
 }) {

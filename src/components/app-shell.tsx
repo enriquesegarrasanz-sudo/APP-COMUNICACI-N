@@ -8,9 +8,10 @@ import {
   type SessionSort,
 } from "@/components/dashboard/DashboardOverview";
 import { SessionBoard } from "@/components/dashboard/SessionBoard";
+import { AiSettingsPanel } from "@/components/settings/AiSettingsPanel";
 import { NewSessionForm } from "@/components/video-form/NewSessionForm";
 import { SessionDetail } from "@/components/video-detail/SessionDetail";
-import type { VideoEntry } from "@/types/video";
+import type { AiSettingsStatus, VideoEntry } from "@/types/video";
 
 function sortVideos(videos: VideoEntry[]) {
   return [...videos].sort((a, b) => b.numero - a.numero);
@@ -58,8 +59,14 @@ function sortByMode(videos: VideoEntry[], sort: SessionSort) {
   return sorted.sort((a, b) => b.numero - a.numero);
 }
 
-export default function AppShell({ initialVideos }: { initialVideos: VideoEntry[] }) {
+type AppShellProps = {
+  initialAiSettings: AiSettingsStatus;
+  initialVideos: VideoEntry[];
+};
+
+export default function AppShell({ initialAiSettings, initialVideos }: AppShellProps) {
   const [videos, setVideos] = useState(() => sortVideos(initialVideos));
+  const [aiSettings, setAiSettings] = useState(initialAiSettings);
   const [selectedId, setSelectedId] = useState<string | null>(() => getInitialSelectedId(initialVideos));
   const [query, setQuery] = useState("");
   const [classifier, setClassifier] = useState<SessionClassifier>("all");
@@ -135,6 +142,7 @@ export default function AppShell({ initialVideos }: { initialVideos: VideoEntry[
         </div>
 
         <NewSessionForm onCreated={upsertEntry} />
+        <AiSettingsPanel initialSettings={aiSettings} onSaved={setAiSettings} />
       </aside>
 
       <section className="workspace">
@@ -165,6 +173,7 @@ export default function AppShell({ initialVideos }: { initialVideos: VideoEntry[
           onSelect={setSelectedId}
         />
         <SessionDetail
+          aiSettings={aiSettings}
           key={selected?.id ?? "empty-session"}
           video={selected}
           onDelete={removeEntry}
