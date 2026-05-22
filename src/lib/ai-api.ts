@@ -77,10 +77,10 @@ function parseNotes(content: string) {
 function buildAnalysisPrompt(entry: VideoEntry, analysis: AnalysisResult, settings: AiSettings) {
   const contextBlocks = [
     settings.applicationContext,
-    "Objetivo de analisis: detectar patrones de comunicacion oral y progreso frente a camara.",
-    "Evalua estructura, claridad, muletillas, repeticiones, ritmo, cierre, intencion y recomendaciones concretas.",
-    "Sobre lenguaje corporal: solo comenta postura, mirada, energia o gestos si aparecen en las notas del usuario o si hay una conexion de vision activa. No inventes lo que no ves.",
-    "Devuelve solo JSON valido con la forma {\"notes\":[\"...\"]}. Cada nota debe ser breve, concreta y accionable.",
+    "Objetivo: analizar una transcripcion escrita para detectar patrones de comunicacion oral y progreso frente a camara.",
+    "No has escuchado el audio original. No inventes palabras, tono, pausas exactas ni lenguaje corporal que no aparezcan en los datos.",
+    "Evalua claridad, estructura, muletillas, repeticiones, ritmo verbal, cierre, intencion y una practica concreta para la siguiente grabacion.",
+    "Devuelve solo JSON valido con la forma {\"notes\":[\"...\"]}. Cada nota debe ser breve, especifica, accionable y escrita en espanol natural.",
   ];
 
   if (settings.historyContextEnabled) {
@@ -130,7 +130,7 @@ function buildAnalysisPrompt(entry: VideoEntry, analysis: AnalysisResult, settin
 
 export async function transcribeWithConfiguredAi(filePath: string, settings: AiSettings) {
   if (!settings.transcriptionEnabled) {
-    throw new PublicError("La transcripcion por API esta desactivada en Conexiones IA.");
+    throw new PublicError("La transcripcion por API esta desactivada. Usa Whisper local en este ordenador.");
   }
 
   const apiKey = requireApiKey(settings);
@@ -170,7 +170,7 @@ export async function transcribeWithConfiguredAi(filePath: string, settings: AiS
 
 export async function getAiCoachNotes(entry: VideoEntry, analysis: AnalysisResult, settings: AiSettings) {
   if (!settings.transcriptAnalysisEnabled) {
-    throw new PublicError("El analisis de transcripcion por IA esta desactivado en Conexiones IA.");
+    throw new PublicError("El analisis de transcripcion por IA esta desactivado.");
   }
 
   if (entry.transcript.trim().length < 40) {

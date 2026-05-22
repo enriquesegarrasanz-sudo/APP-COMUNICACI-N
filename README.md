@@ -31,17 +31,9 @@ WHISPER_COMMAND=python -m whisper
 WHISPER_MODEL=base
 ```
 
-### OpenAI
-
-```env
-OPENAI_API_KEY=tu_api_key
-OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
-```
-
 ### DeepSeek
 
-DeepSeek queda disponible como preset en `Conexiones IA` para analisis textual de transcripciones.
-Usa la clave en el servidor y deja la transcripcion con Whisper local u OpenAI.
+DeepSeek es la unica conexion IA de la app. Se usa para analizar transcripciones ya escritas y generar coaching textual. La transcripcion sigue usando Whisper local en tu ordenador.
 
 ```env
 DEEPSEEK_API_KEY=tu_api_key
@@ -58,17 +50,16 @@ GOOGLE_DRIVE_SERVICE_ACCOUNT_EMAIL=email-de-la-service-account
 GOOGLE_DRIVE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
 
-### Conexiones IA
+### Conectar Con DeepSeek
 
-La aplicacion incluye un panel `Conexiones IA` para configurar proveedor, base URL, endpoints, modo de autenticacion, variable de clave, modelo de transcripcion, modelo de analisis y contexto global de la app. OpenAI es solo el preset inicial: tambien puedes conectar DeepSeek, APIs compatibles, proveedores mas economicos o un endpoint propio/proxy. Las claves no se guardan en el codigo: se leen desde `.env.local` usando el nombre de variable definido en el panel.
+La aplicacion incluye un panel `Conectar con DeepSeek`. No guarda claves en codigo: solo comprueba que exista `DEEPSEEK_API_KEY` en el servidor.
 
-El preset DeepSeek usa `https://api.deepseek.com`, endpoint `chat/completions`, autenticacion `Bearer`, variable `DEEPSEEK_API_KEY` y modelo `deepseek-v4-flash` para coaching textual. La transcripcion queda desactivada por defecto en ese preset porque DeepSeek no aporta el endpoint de audio que usa esta app.
+La conexion usa `https://api.deepseek.com`, endpoint `chat/completions`, autenticacion `Bearer`, variable `DEEPSEEK_API_KEY` y modelo `deepseek-v4-flash` para coaching textual. DeepSeek no se usa para transcribir audio: el boton `Transcribir` usa Whisper local.
 
 Por seguridad, las escrituras por API solo aceptan peticiones desde `localhost` salvo que definas `APP_ALLOW_REMOTE_WRITE=true`. No actives esa variable en una app publicada sin poner autenticacion delante.
 
 El contexto de la app explica a la IA que APP SPEAKING sirve para entrenar comunicacion frente a camara. Con ese contexto, la IA debe:
 
-- Transcribir audio o video de forma fiel, conservando muletillas y pausas habladas.
 - Analizar la transcripcion: estructura, claridad, ritmo, muletillas, repeticiones, cierres e intencion.
 - Analizar lenguaje corporal solo cuando haya notas del usuario o una conexion de vision activa.
 - Devolver consejos breves y accionables para la siguiente grabacion.

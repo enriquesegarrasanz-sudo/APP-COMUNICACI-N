@@ -464,6 +464,47 @@ select:focus {
   line-height: 1.35;
 }
 
+.deepseek-summary {
+  display: grid;
+  gap: var(--camera-space-1);
+  border: 1px solid var(--camera-line);
+  border-radius: var(--camera-radius-md);
+  background: rgba(255, 255, 255, 0.66);
+  padding: 12px;
+}
+
+.deepseek-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--camera-space-1);
+  color: var(--camera-ink-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.deepseek-summary strong {
+  color: var(--camera-blue-deep);
+  font-family: var(--camera-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.deepseek-summary small,
+.local-transcription-chip {
+  color: var(--camera-ink-soft);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.local-transcription-chip {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  border: 1px solid var(--camera-line);
+  border-radius: var(--camera-radius-sm);
+  background: var(--camera-paper-strong);
+  padding: 9px 12px;
+}
+
 .context-field textarea {
   min-height: 126px;
   line-height: 1.55;

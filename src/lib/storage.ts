@@ -3,10 +3,8 @@ import path from "node:path";
 import { defaultAiSettings, defaultDriveSettings } from "@/lib/ai-defaults";
 import { uploadFileToDrive } from "@/lib/google-drive";
 import { processUploadedMedia } from "@/lib/media-processing";
-import { PublicError, isLoopbackHostname } from "@/lib/security";
+import { PublicError } from "@/lib/security";
 import type {
-  AiAuthMode,
-  AiProviderKind,
   AiSettings,
   AiSettingsStatus,
   AppDatabase,
@@ -55,18 +53,6 @@ const allowedMediaExtensions = new Set([
 const audioExtensions = new Set([".aac", ".m4a", ".mp3", ".ogg", ".wav"]);
 
 let databaseQueue = Promise.resolve();
-
-const allowedProviderKinds = new Set<AiProviderKind>([
-  "openai",
-  "deepseek",
-  "openai-compatible",
-  "anthropic",
-  "google",
-  "mistral",
-  "custom",
-]);
-
-const allowedAuthModes = new Set<AiAuthMode>(["bearer", "x-api-key", "query-key", "none"]);
 
 function withDatabaseLock<T>(operation: () => Promise<T>) {
   const queued = databaseQueue.then(operation, operation);
@@ -163,111 +149,11 @@ function normalizeEnvVar(value: unknown, fallback: string, fieldName: string, st
   return text;
 }
 
-function normalizeEndpoint(value: unknown, fallback: string, fieldName: string, strict = false) {
-  const text = boundedStringOrDefault(value, fallback, textLimits.endpoint, fieldName, strict).replace(/^\/+/, "");
-
-  if (/^https?:\/\//i.test(text) || text.includes("\\") || text.includes("..")) {
-    validationError(`${fieldName} debe ser una ruta relativa del proveedor.`, strict);
-    return fallback;
-  }
-
-  return text;
-}
-
-function normalizeBaseUrl(value: unknown, fallback: string, strict = false) {
-  const raw = boundedStringOrDefault(value, fallback, textLimits.baseUrl, "URL base", strict).replace(/\/+$/, "");
-
-  try {
-    const parsed = new URL(raw);
-
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      throw new PublicError("La URL base debe usar HTTP o HTTPS.");
-    }
-
-    if (parsed.protocol === "http:" && !isLoopbackHostname(parsed.hostname)) {
-      throw new PublicError("Usa HTTPS para proveedores remotos o HTTP solo en localhost.");
-    }
-
-    return parsed.toString().replace(/\/+$/, "");
-  } catch (error) {
-    if (strict) {
-      throw error instanceof PublicError ? error : new PublicError("La URL base del proveedor no es valida.");
-    }
-
-    return fallback.replace(/\/+$/, "");
-  }
-}
-
-function normalizeAiSettings(value: unknown, strict = false): AiSettings {
+function normalizeAiSettings(value: unknown): AiSettings {
   const input = value && typeof value === "object" ? (value as Partial<AiSettings>) : {};
-  const providerKind = allowedProviderKinds.has(input.providerKind as AiProviderKind)
-    ? (input.providerKind as AiProviderKind)
-    : defaultAiSettings.providerKind;
-  const authMode = allowedAuthModes.has(input.authMode as AiAuthMode)
-    ? (input.authMode as AiAuthMode)
-    : defaultAiSettings.authMode;
 
   return {
-    providerKind,
-    providerName: boundedStringOrDefault(
-      input.providerName,
-      defaultAiSettings.providerName,
-      textLimits.providerName,
-      "Nombre del proveedor",
-      strict,
-    ),
-    baseUrl: normalizeBaseUrl(input.baseUrl, defaultAiSettings.baseUrl, strict),
-    chatEndpoint: normalizeEndpoint(input.chatEndpoint, defaultAiSettings.chatEndpoint, "Endpoint de chat", strict),
-    transcriptionEndpoint: normalizeEndpoint(
-      input.transcriptionEndpoint,
-      defaultAiSettings.transcriptionEndpoint,
-      "Endpoint de transcripcion",
-      strict,
-    ),
-    authMode,
-    apiKeyEnvVar: normalizeEnvVar(input.apiKeyEnvVar, defaultAiSettings.apiKeyEnvVar, "Variable de API key", strict),
-    apiKeyQueryParam: boundedStringOrDefault(
-      input.apiKeyQueryParam,
-      defaultAiSettings.apiKeyQueryParam,
-      textLimits.queryParam,
-      "Parametro query de API key",
-      strict,
-    ),
-    transcriptionModel: boundedStringOrDefault(
-      input.transcriptionModel,
-      defaultAiSettings.transcriptionModel,
-      textLimits.model,
-      "Modelo de transcripcion",
-      strict,
-    ),
-    analysisModel: boundedStringOrDefault(
-      input.analysisModel,
-      defaultAiSettings.analysisModel,
-      textLimits.model,
-      "Modelo de analisis",
-      strict,
-    ),
-    visionModel: boundedStringOrDefault(
-      input.visionModel,
-      defaultAiSettings.visionModel,
-      textLimits.model,
-      "Modelo de vision",
-      strict,
-    ),
-    transcriptionEnabled: booleanOrDefault(input.transcriptionEnabled, defaultAiSettings.transcriptionEnabled),
-    transcriptAnalysisEnabled: booleanOrDefault(
-      input.transcriptAnalysisEnabled,
-      defaultAiSettings.transcriptAnalysisEnabled,
-    ),
-    videoAnalysisEnabled: booleanOrDefault(input.videoAnalysisEnabled, defaultAiSettings.videoAnalysisEnabled),
-    historyContextEnabled: booleanOrDefault(input.historyContextEnabled, defaultAiSettings.historyContextEnabled),
-    applicationContext: boundedStringOrDefault(
-      input.applicationContext,
-      defaultAiSettings.applicationContext,
-      textLimits.applicationContext,
-      "Contexto de aplicacion",
-      strict,
-    ),
+    ...defaultAiSettings,
     updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : undefined,
   };
 }
@@ -480,14 +366,11 @@ export async function updateAiSettings(patch: Partial<AiSettings>) {
     const definedPatch = Object.fromEntries(
       Object.entries(patch).filter(([, value]) => value !== undefined),
     ) as Partial<AiSettings>;
-    const next = normalizeAiSettings(
-      {
-        ...database.aiSettings,
-        ...definedPatch,
-        updatedAt: new Date().toISOString(),
-      },
-      true,
-    );
+    const next = normalizeAiSettings({
+      ...database.aiSettings,
+      ...definedPatch,
+      updatedAt: new Date().toISOString(),
+    });
 
     database.aiSettings = next;
     await writeDatabase(database);

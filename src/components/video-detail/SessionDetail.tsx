@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { compareSessions } from "@/lib/insights";
-import type { AiSettingsStatus, TranscriptionProvider, VideoEntry } from "@/types/video";
+import type { AiSettingsStatus, VideoEntry } from "@/types/video";
 
 type Props = {
   aiSettings: AiSettingsStatus;
@@ -159,9 +159,6 @@ function formatSigned(value: number | null, suffix = "") {
 
 export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange, onDelete }: Props) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(video));
-  const [provider, setProvider] = useState<TranscriptionProvider>(
-    aiSettings.apiKeyConfigured && aiSettings.transcriptionEnabled ? "ai-api" : "local",
-  );
   const [useAi, setUseAi] = useState(false);
   const [saving, setSaving] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -178,9 +175,8 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
   }
 
   const currentVideo = video;
-  const aiTranscriptionReady = aiSettings.apiKeyConfigured && aiSettings.transcriptionEnabled;
   const aiAnalysisReady = aiSettings.apiKeyConfigured && aiSettings.transcriptAnalysisEnabled;
-  const transcribeDisabled = transcribing || (provider === "ai-api" && !aiTranscriptionReady);
+  const transcribeDisabled = transcribing;
   const analyzeDisabled = analyzing || !draft.transcript.trim() || (useAi && !aiAnalysisReady);
   const messageIsError =
     message.includes("No se pudo") ||
@@ -231,7 +227,7 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
       const response = await fetch("/api/transcribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: currentVideo.id, provider }),
+        body: JSON.stringify({ id: currentVideo.id, provider: "local" }),
       });
       const payload = (await response.json()) as { entry?: VideoEntry; error?: string };
 
@@ -461,12 +457,7 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
             <h2>Transcripcion</h2>
           </div>
           <div className="toolbar-controls">
-            <select value={provider} onChange={(event) => setProvider(event.target.value as TranscriptionProvider)}>
-              <option value="local">Whisper local</option>
-              <option disabled={!aiTranscriptionReady} value="ai-api">
-                {aiSettings.providerName} API
-              </option>
-            </select>
+            <span className="local-transcription-chip">Whisper local</span>
             <button className="secondary-action" disabled={transcribeDisabled} onClick={transcribe} type="button">
               {transcribing ? (
                 <LoaderCircle aria-hidden="true" size={17} />
@@ -477,12 +468,6 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
             </button>
           </div>
         </div>
-
-        {provider === "ai-api" && !aiTranscriptionReady ? (
-          <p className="inline-error">
-            Activa transcripcion API y configura {aiSettings.apiKeyEnvVar} en Conexiones IA.
-          </p>
-        ) : null}
 
         <textarea
           className="transcript-area"

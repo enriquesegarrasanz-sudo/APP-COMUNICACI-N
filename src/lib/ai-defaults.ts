@@ -1,24 +1,24 @@
 import type { AiSettings, DriveSettings } from "@/types/video";
 
 export const defaultApplicationContext =
-  "APP SPEAKING es una aplicacion local para entrenar comunicacion frente a camara. " +
-  "La IA debe ayudar a transcribir de forma fiel, conservar muletillas y pausas habladas, " +
-  "analizar claridad, estructura, ritmo, repeticiones, muletillas, cierre, intencion, " +
-  "lenguaje corporal solo cuando existan observaciones o vision conectada, y devolver consejos breves, concretos y accionables.";
+  "APP SPEAKING es una aplicacion para entrenar comunicacion frente a camara con practica diaria. " +
+  "DeepSeek recibe una transcripcion ya escrita y debe actuar como coach de oratoria: detectar patrones de claridad, estructura, ritmo, muletillas, repeticiones, cierre e intencion. " +
+  "No debe inventar informacion del video ni corregir la transcripcion como si hubiera escuchado el audio. " +
+  "Debe devolver consejos breves, concretos y accionables para la siguiente grabacion.";
 
 export const defaultAiSettings: AiSettings = {
-  providerKind: "openai",
-  providerName: "OpenAI",
-  baseUrl: "https://api.openai.com/v1",
+  providerKind: "deepseek",
+  providerName: "DeepSeek",
+  baseUrl: "https://api.deepseek.com",
   chatEndpoint: "chat/completions",
   transcriptionEndpoint: "audio/transcriptions",
   authMode: "bearer",
-  apiKeyEnvVar: "OPENAI_API_KEY",
+  apiKeyEnvVar: "DEEPSEEK_API_KEY",
   apiKeyQueryParam: "key",
-  transcriptionModel: "gpt-4o-mini-transcribe",
-  analysisModel: "gpt-5-nano",
-  visionModel: "gpt-5-nano",
-  transcriptionEnabled: true,
+  transcriptionModel: "whisper-local",
+  analysisModel: "deepseek-v4-flash",
+  visionModel: "no-disponible",
+  transcriptionEnabled: false,
   transcriptAnalysisEnabled: true,
   videoAnalysisEnabled: false,
   historyContextEnabled: true,

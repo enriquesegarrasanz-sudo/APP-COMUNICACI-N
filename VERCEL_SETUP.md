@@ -14,13 +14,10 @@ Esta app es un proyecto Next.js en la raiz del repositorio. En la pantalla de im
 En `Environment Variables`, pulsa `Import .env` y usa el archivo `.env.vercel.example`.
 
 ```env
-OPENAI_API_KEY=
-OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
-OPENAI_ANALYSIS_MODEL=gpt-5-nano
 DEEPSEEK_API_KEY=
 ```
 
-Rellena `OPENAI_API_KEY` o `DEEPSEEK_API_KEY` directamente en Vercel con tu clave real. No la guardes en GitHub.
+Rellena `DEEPSEEK_API_KEY` directamente en Vercel con tu clave real. No la guardes en GitHub.
 
 No importes `WHISPER_COMMAND` ni `WHISPER_MODEL` en Vercel: Whisper local solo funciona en tu ordenador porque depende de un binario instalado en la maquina.
 
@@ -45,7 +42,7 @@ Al importar el repositorio desde GitHub, Vercel crea despliegues automaticamente
 
 ## Aviso Importante Sobre Videos
 
-La version actual guarda datos en `data/app.json` y videos en `public/uploads/`. Eso funciona bien en local, pero Vercel Functions tienen filesystem de solo lectura salvo `/tmp`, y las peticiones a Functions tienen limite de payload. Ademas, la API de transcripcion de OpenAI tiene limite de archivo, asi que los videos largos deben subirse a almacenamiento externo y/o convertirse a audio comprimido antes de transcribir.
+La version actual guarda datos en `data/app.json` y videos en `public/uploads/`. Eso funciona bien en local, pero Vercel Functions tienen filesystem de solo lectura salvo `/tmp`, y las peticiones a Functions tienen limite de payload. Ademas, Whisper local solo puede transcribir en tu ordenador, asi que los videos subidos desde la tablet deben estar accesibles tambien para la app local antes de transcribir.
 
 Para usar la app como web app real en tablet con videos persistentes hay que migrar:
 
