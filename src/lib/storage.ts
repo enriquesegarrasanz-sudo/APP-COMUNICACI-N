@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { defaultAiSettings, defaultDriveSettings } from "@/lib/ai-defaults";
+import { defaultAiSettings, defaultDriveSettings, getAiSettingsPreset } from "@/lib/ai-defaults";
 import { uploadFileToDrive } from "@/lib/google-drive";
 import { processUploadedMedia } from "@/lib/media-processing";
 import { PublicError } from "@/lib/security";
@@ -151,9 +151,10 @@ function normalizeEnvVar(value: unknown, fallback: string, fieldName: string, st
 
 function normalizeAiSettings(value: unknown): AiSettings {
   const input = value && typeof value === "object" ? (value as Partial<AiSettings>) : {};
+  const preset = getAiSettingsPreset(input.providerKind ?? defaultAiSettings.providerKind, input.analysisModel);
 
   return {
-    ...defaultAiSettings,
+    ...preset,
     updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : undefined,
   };
 }

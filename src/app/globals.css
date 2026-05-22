@@ -421,6 +421,61 @@ select:focus {
   grid-template-columns: 1fr;
 }
 
+.ai-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--camera-space-2);
+}
+
+.ai-provider-card {
+  display: grid;
+  min-width: 0;
+  min-height: 92px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--camera-space-2);
+  border: 1px solid var(--camera-line);
+  border-radius: var(--camera-radius-md);
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--camera-ink-soft);
+  padding: 12px;
+  text-align: left;
+}
+
+.ai-provider-card:hover,
+.ai-provider-card.is-active {
+  border-color: var(--camera-blue);
+  background: var(--camera-paper-strong);
+  color: var(--camera-blue-deep);
+}
+
+.ai-provider-card svg {
+  color: var(--camera-blue);
+}
+
+.ai-provider-card span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ai-provider-card strong,
+.ai-provider-card small {
+  overflow-wrap: anywhere;
+}
+
+.ai-provider-card strong {
+  color: var(--camera-ink);
+  font-size: 0.88rem;
+}
+
+.ai-provider-card small {
+  color: var(--camera-ink-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .setting-toggle {
   display: grid;
   min-height: 58px;
@@ -489,10 +544,25 @@ select:focus {
 }
 
 .deepseek-summary small,
-.local-transcription-chip {
+.local-transcription-chip,
+.model-select small {
   color: var(--camera-ink-soft);
   font-weight: 700;
   line-height: 1.4;
+}
+
+.model-select {
+  display: grid;
+  gap: var(--camera-space-2);
+  color: var(--camera-ink-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.model-select span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--camera-space-1);
 }
 
 .local-transcription-chip {
@@ -1606,6 +1676,7 @@ select:focus {
   }
 
   .control-grid,
+  .ai-provider-grid,
   .session-card-grid,
   .week-row {
     grid-template-columns: 1fr;

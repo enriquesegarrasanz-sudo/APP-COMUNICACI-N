@@ -7,6 +7,13 @@ type ChatCompletionPayload = {
   choices?: Array<{ message?: { content?: string } }>;
 };
 
+type OllamaChatPayload = {
+  error?: string;
+  message?: {
+    content?: string;
+  };
+};
+
 type ChatCompletionRequest = {
   model: string;
   messages: ReturnType<typeof buildAnalysisPrompt>;
@@ -20,6 +27,14 @@ type AnthropicPayload = {
 
 function endpoint(baseUrl: string, suffix: string) {
   return `${baseUrl.replace(/\/+$/, "")}/${suffix.replace(/^\/+/, "")}`;
+}
+
+function providerBaseUrl(settings: AiSettings) {
+  if (settings.providerKind === "ollama") {
+    return process.env.OLLAMA_BASE_URL || settings.baseUrl;
+  }
+
+  return settings.baseUrl;
 }
 
 function requireApiKey(settings: AiSettings) {
@@ -55,7 +70,7 @@ function authorizationHeaders(settings: AiSettings, apiKey: string): Record<stri
 }
 
 function apiUrl(settings: AiSettings, suffix: string, apiKey: string) {
-  const url = endpoint(settings.baseUrl, suffix);
+  const url = endpoint(providerBaseUrl(settings), suffix);
 
   if (settings.authMode !== "query-key") {
     return requireSafeServiceUrl(url);
@@ -68,10 +83,43 @@ function apiUrl(settings: AiSettings, suffix: string, apiKey: string) {
 }
 
 function parseNotes(content: string) {
-  const parsed = JSON.parse(content) as { notes?: string[] };
+  const cleaned = cleanAssistantContent(content);
+  const parsed = parseJsonObject(cleaned) as { notes?: string[] } | null;
+
+  if (!parsed) {
+    return cleaned ? [cleaned.replace(/\s+/g, " ").slice(0, 420)] : null;
+  }
+
   return Array.isArray(parsed.notes)
     ? parsed.notes.filter((item) => typeof item === "string" && item.trim()).slice(0, 4)
     : null;
+}
+
+function cleanAssistantContent(content: string) {
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/```(?:json)?/gi, "")
+    .replace(/```/g, "")
+    .trim();
+}
+
+function parseJsonObject(content: string) {
+  try {
+    return JSON.parse(content) as unknown;
+  } catch {
+    const start = content.indexOf("{");
+    const end = content.lastIndexOf("}");
+
+    if (start === -1 || end === -1 || end <= start) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(content.slice(start, end + 1)) as unknown;
+    } catch {
+      return null;
+    }
+  }
 }
 
 function buildAnalysisPrompt(entry: VideoEntry, analysis: AnalysisResult, settings: AiSettings) {
@@ -177,8 +225,44 @@ export async function getAiCoachNotes(entry: VideoEntry, analysis: AnalysisResul
     return null;
   }
 
-  const apiKey = requireApiKey(settings);
   const messages = buildAnalysisPrompt(entry, analysis, settings);
+
+  if (settings.providerKind === "ollama") {
+    const response = await fetch(apiUrl(settings, settings.chatEndpoint, ""), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: settings.analysisModel,
+        messages,
+        stream: false,
+        format: "json",
+        think: false,
+        options: {
+          temperature: 0.2,
+          num_predict: 700,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new PublicError(
+        `${settings.providerName} analisis fallo: ${response.status}. Abre Ollama y comprueba que el modelo ${settings.analysisModel} esta descargado.`,
+      );
+    }
+
+    const payload = (await response.json()) as OllamaChatPayload;
+
+    if (payload.error) {
+      throw new PublicError(payload.error);
+    }
+
+    const content = payload.message?.content;
+    return content ? parseNotes(content) : null;
+  }
+
+  const apiKey = requireApiKey(settings);
 
   if (settings.providerKind === "anthropic") {
     const [systemMessage, userMessage] = messages;

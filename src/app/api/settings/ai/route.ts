@@ -6,8 +6,9 @@ import {
   readJsonObject,
   requireLocalWriteRequest,
 } from "@/lib/security";
-import { defaultAiSettings } from "@/lib/ai-defaults";
+import { getAiSettingsPreset } from "@/lib/ai-defaults";
 import { getAiSettingsStatus, updateAiSettings } from "@/lib/storage";
+import type { AiSettings } from "@/types/video";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,8 +26,8 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    await readJsonObject(request);
-    await updateAiSettings(defaultAiSettings);
+    const body = await readJsonObject<{ providerKind?: AiSettings["providerKind"]; analysisModel?: string }>(request);
+    await updateAiSettings(getAiSettingsPreset(body.providerKind ?? "deepseek", body.analysisModel));
     const settings = await getAiSettingsStatus();
     return NextResponse.json({ settings });
   } catch (error) {

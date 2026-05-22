@@ -159,7 +159,9 @@ function formatSigned(value: number | null, suffix = "") {
 
 export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange, onDelete }: Props) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(video));
-  const [useAi, setUseAi] = useState(false);
+  const [useAi, setUseAi] = useState(
+    () => aiSettings.transcriptAnalysisEnabled && (aiSettings.authMode === "none" || aiSettings.apiKeyConfigured),
+  );
   const [saving, setSaving] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -175,7 +177,9 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
   }
 
   const currentVideo = video;
-  const aiAnalysisReady = aiSettings.apiKeyConfigured && aiSettings.transcriptAnalysisEnabled;
+  const aiAnalysisReady =
+    aiSettings.transcriptAnalysisEnabled && (aiSettings.authMode === "none" || aiSettings.apiKeyConfigured);
+  const aiProviderLabel = aiSettings.providerKind === "ollama" ? `${aiSettings.providerName} (${aiSettings.analysisModel})` : aiSettings.providerName;
   const transcribeDisabled = transcribing;
   const analyzeDisabled = analyzing || !draft.transcript.trim() || (useAi && !aiAnalysisReady);
   const messageIsError =
@@ -490,7 +494,7 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
                 type="checkbox"
                 onChange={(event) => setUseAi(event.target.checked)}
               />
-              {aiSettings.providerName}
+              {aiProviderLabel}
             </label>
             <button className="primary-action" disabled={analyzeDisabled} onClick={analyze} type="button">
               {analyzing ? <LoaderCircle aria-hidden="true" size={17} /> : <Sparkles aria-hidden="true" size={17} />}
@@ -499,7 +503,7 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
           </div>
         </div>
 
-        {!aiAnalysisReady ? (
+        {!aiAnalysisReady && aiSettings.authMode !== "none" ? (
           <p className="empty-line">El analisis local funciona siempre. Para coaching IA, configura {aiSettings.apiKeyEnvVar}.</p>
         ) : null}
         {message ? <p className={messageIsError ? "inline-error" : "inline-message"}>{message}</p> : null}

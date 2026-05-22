@@ -5,6 +5,7 @@ export type TranscriptionProvider = "local" | "openai" | "ai-api";
 export type AiProviderKind =
   | "openai"
   | "deepseek"
+  | "ollama"
   | "openai-compatible"
   | "anthropic"
   | "google"

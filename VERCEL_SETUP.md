@@ -19,7 +19,7 @@ DEEPSEEK_API_KEY=
 
 Rellena `DEEPSEEK_API_KEY` directamente en Vercel con tu clave real. No la guardes en GitHub.
 
-No importes `WHISPER_COMMAND` ni `WHISPER_MODEL` en Vercel: Whisper local solo funciona en tu ordenador porque depende de un binario instalado en la maquina.
+No importes `WHISPER_COMMAND`, `WHISPER_MODEL` ni `OLLAMA_BASE_URL` en Vercel: Whisper y Ollama local solo funcionan en tu ordenador porque dependen de programas instalados en esa maquina.
 
 No actives `APP_ALLOW_REMOTE_WRITE=true` en Vercel salvo que pongas autenticacion delante. Por defecto, las rutas que crean, editan, borran o cambian configuracion solo aceptan escrituras desde `localhost`.
 
@@ -49,4 +49,4 @@ Para usar la app como web app real en tablet con videos persistentes hay que mig
 - Metadatos y transcripciones: Postgres, Supabase, Neon o similar.
 - Videos/audio: Vercel Blob o almacenamiento tipo S3.
 
-La configuracion de este archivo sirve para desplegar y probar la interfaz, pero el flujo completo de subir videos desde la tablet necesita esa migracion de almacenamiento.
+La configuracion de este archivo sirve para desplegar y probar la interfaz. Para usar Whisper y Ollama local desde la tablet, lo mas practico es ejecutar la app en tu ordenador y abrir desde la tablet la URL local de ese ordenador en la misma red.

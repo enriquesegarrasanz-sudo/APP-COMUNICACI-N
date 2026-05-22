@@ -2,11 +2,11 @@ import type { AiSettings, DriveSettings } from "@/types/video";
 
 export const defaultApplicationContext =
   "APP SPEAKING es una aplicacion para entrenar comunicacion frente a camara con practica diaria. " +
-  "DeepSeek recibe una transcripcion ya escrita y debe actuar como coach de oratoria: detectar patrones de claridad, estructura, ritmo, muletillas, repeticiones, cierre e intencion. " +
+  "La IA recibe una transcripcion ya escrita y debe actuar como coach de oratoria: detectar patrones de claridad, estructura, ritmo, muletillas, repeticiones, cierre e intencion. " +
   "No debe inventar informacion del video ni corregir la transcripcion como si hubiera escuchado el audio. " +
   "Debe devolver consejos breves, concretos y accionables para la siguiente grabacion.";
 
-export const defaultAiSettings: AiSettings = {
+export const deepseekAiSettings: AiSettings = {
   providerKind: "deepseek",
   providerName: "DeepSeek",
   baseUrl: "https://api.deepseek.com",
@@ -24,6 +24,42 @@ export const defaultAiSettings: AiSettings = {
   historyContextEnabled: true,
   applicationContext: defaultApplicationContext,
 };
+
+export const ollamaAiSettings: AiSettings = {
+  providerKind: "ollama",
+  providerName: "Ollama local",
+  baseUrl: "http://127.0.0.1:11434",
+  chatEndpoint: "api/chat",
+  transcriptionEndpoint: "",
+  authMode: "none",
+  apiKeyEnvVar: "",
+  apiKeyQueryParam: "",
+  transcriptionModel: "whisper-local",
+  analysisModel: "qwen3:14b",
+  visionModel: "qwen3-vl:8b",
+  transcriptionEnabled: false,
+  transcriptAnalysisEnabled: true,
+  videoAnalysisEnabled: false,
+  historyContextEnabled: true,
+  applicationContext: defaultApplicationContext,
+};
+
+export const defaultAiSettings: AiSettings = deepseekAiSettings;
+
+export const ollamaAnalysisModels = ["qwen3:14b", "qwen3-vl:8b"] as const;
+
+export function getAiSettingsPreset(providerKind: AiSettings["providerKind"], analysisModel?: string): AiSettings {
+  if (providerKind === "ollama") {
+    return {
+      ...ollamaAiSettings,
+      analysisModel: ollamaAnalysisModels.includes(analysisModel as (typeof ollamaAnalysisModels)[number])
+        ? String(analysisModel)
+        : ollamaAiSettings.analysisModel,
+    };
+  }
+
+  return deepseekAiSettings;
+}
 
 export const defaultDriveSettings: DriveSettings = {
   enabled: false,

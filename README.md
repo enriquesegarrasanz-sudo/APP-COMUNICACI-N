@@ -31,13 +31,16 @@ WHISPER_COMMAND=python -m whisper
 WHISPER_MODEL=base
 ```
 
-### DeepSeek
+### Analisis IA: DeepSeek U Ollama
 
-DeepSeek es la unica conexion IA de la app. Se usa para analizar transcripciones ya escritas y generar coaching textual. La transcripcion sigue usando Whisper local en tu ordenador.
+La transcripcion usa Whisper local. Despues puedes analizar la transcripcion con DeepSeek API o con Ollama local.
 
 ```env
 DEEPSEEK_API_KEY=tu_api_key
+OLLAMA_BASE_URL=http://127.0.0.1:11434
 ```
+
+`OLLAMA_BASE_URL` solo hace falta si cambiaste el host o puerto de Ollama. Con la instalacion normal, la app usa `http://127.0.0.1:11434`.
 
 ### Google Drive Y Procesado
 
@@ -50,11 +53,21 @@ GOOGLE_DRIVE_SERVICE_ACCOUNT_EMAIL=email-de-la-service-account
 GOOGLE_DRIVE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
 
-### Conectar Con DeepSeek
+### Conectar Con IA
 
-La aplicacion incluye un panel `Conectar con DeepSeek`. No guarda claves en codigo: solo comprueba que exista `DEEPSEEK_API_KEY` en el servidor.
+La aplicacion incluye un panel `Conectar con IA` con dos modos:
 
-La conexion usa `https://api.deepseek.com`, endpoint `chat/completions`, autenticacion `Bearer`, variable `DEEPSEEK_API_KEY` y modelo `deepseek-v4-flash` para coaching textual. DeepSeek no se usa para transcribir audio: el boton `Transcribir` usa Whisper local.
+- `DeepSeek API`: usa `https://api.deepseek.com`, endpoint `chat/completions`, autenticacion `Bearer`, variable `DEEPSEEK_API_KEY` y modelo `deepseek-v4-flash`.
+- `Ollama local`: usa Ollama en tu ordenador, endpoint `http://127.0.0.1:11434/api/chat` y modelo `qwen3:14b` por defecto. No necesita clave.
+
+Para Ollama local, deja abierta la aplicacion de Ollama y ten descargado el modelo:
+
+```bash
+ollama pull qwen3:14b
+ollama pull qwen3-vl:8b
+```
+
+DeepSeek y Ollama no se usan para transcribir audio: el boton `Transcribir` usa Whisper local.
 
 Por seguridad, las escrituras por API solo aceptan peticiones desde `localhost` salvo que definas `APP_ALLOW_REMOTE_WRITE=true`. No actives esa variable en una app publicada sin poner autenticacion delante.
 
