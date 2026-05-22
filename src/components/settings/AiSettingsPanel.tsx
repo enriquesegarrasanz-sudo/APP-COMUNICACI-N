@@ -15,18 +15,28 @@ import {
   Save,
   Settings2,
 } from "lucide-react";
+import { defaultAiSettings } from "@/lib/ai-defaults";
 import type { AiProviderKind, AiSettings, AiSettingsStatus } from "@/types/video";
 
 type Props = {
-  initialSettings: AiSettingsStatus;
+  initialSettings?: AiSettingsStatus;
   onSaved: (settings: AiSettingsStatus) => void;
+};
+
+const fallbackAiSettings: AiSettingsStatus = {
+  ...defaultAiSettings,
+  apiKeyConfigured: false,
 };
 
 const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
   openai: {
     providerName: "OpenAI",
     baseUrl: "https://api.openai.com/v1",
+    chatEndpoint: "chat/completions",
+    transcriptionEndpoint: "audio/transcriptions",
+    authMode: "bearer",
     apiKeyEnvVar: "OPENAI_API_KEY",
+    apiKeyQueryParam: "key",
     transcriptionModel: "gpt-4o-mini-transcribe",
     analysisModel: "gpt-5-nano",
     visionModel: "gpt-5-nano",
@@ -36,7 +46,11 @@ const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
   "openai-compatible": {
     providerName: "API compatible",
     baseUrl: "https://api.tu-proveedor.com/v1",
+    chatEndpoint: "chat/completions",
+    transcriptionEndpoint: "audio/transcriptions",
+    authMode: "bearer",
     apiKeyEnvVar: "AI_API_KEY",
+    apiKeyQueryParam: "key",
     transcriptionModel: "whisper-large-v3",
     analysisModel: "modelo-chat",
     visionModel: "modelo-vision",
@@ -46,7 +60,11 @@ const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
   anthropic: {
     providerName: "Anthropic",
     baseUrl: "https://api.anthropic.com/v1",
+    chatEndpoint: "messages",
+    transcriptionEndpoint: "audio/transcriptions",
+    authMode: "x-api-key",
     apiKeyEnvVar: "ANTHROPIC_API_KEY",
+    apiKeyQueryParam: "key",
     analysisModel: "claude-sonnet-4-5",
     visionModel: "claude-sonnet-4-5",
     transcriptionEnabled: false,
@@ -55,7 +73,11 @@ const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
   google: {
     providerName: "Google AI",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    chatEndpoint: "chat/completions",
+    transcriptionEndpoint: "audio/transcriptions",
+    authMode: "query-key",
     apiKeyEnvVar: "GOOGLE_API_KEY",
+    apiKeyQueryParam: "key",
     analysisModel: "gemini-2.5-flash",
     visionModel: "gemini-2.5-flash",
     transcriptionEnabled: false,
@@ -64,7 +86,11 @@ const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
   mistral: {
     providerName: "Mistral",
     baseUrl: "https://api.mistral.ai/v1",
+    chatEndpoint: "chat/completions",
+    transcriptionEndpoint: "audio/transcriptions",
+    authMode: "bearer",
     apiKeyEnvVar: "MISTRAL_API_KEY",
+    apiKeyQueryParam: "key",
     analysisModel: "mistral-small-latest",
     visionModel: "pixtral-large-latest",
     transcriptionEnabled: false,
@@ -73,7 +99,11 @@ const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
   custom: {
     providerName: "Proveedor propio",
     baseUrl: "https://api.tu-proveedor.com/v1",
+    chatEndpoint: "chat/completions",
+    transcriptionEndpoint: "audio/transcriptions",
+    authMode: "bearer",
     apiKeyEnvVar: "AI_API_KEY",
+    apiKeyQueryParam: "key",
     transcriptionModel: "modelo-transcripcion",
     analysisModel: "modelo-analisis",
     visionModel: "modelo-vision",
@@ -84,7 +114,7 @@ const providerDefaults: Record<AiProviderKind, Partial<AiSettings>> = {
 
 const providerLabels: Array<{ value: AiProviderKind; label: string }> = [
   { value: "openai", label: "OpenAI" },
-  { value: "openai-compatible", label: "OpenAI compatible" },
+  { value: "openai-compatible", label: "API compatible" },
   { value: "anthropic", label: "Anthropic" },
   { value: "google", label: "Google AI" },
   { value: "mistral", label: "Mistral" },
@@ -115,7 +145,7 @@ function ToggleRow({
 }
 
 export function AiSettingsPanel({ initialSettings, onSaved }: Props) {
-  const [draft, setDraft] = useState<AiSettingsStatus>(initialSettings);
+  const [draft, setDraft] = useState<AiSettingsStatus>(() => initialSettings ?? fallbackAiSettings);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -207,11 +237,39 @@ export function AiSettingsPanel({ initialSettings, onSaved }: Props) {
         </label>
 
         <label>
+          <span>Endpoint chat</span>
+          <input value={draft.chatEndpoint} onChange={(event) => updateDraft("chatEndpoint", event.target.value)} />
+        </label>
+
+        <label>
+          <span>Endpoint transcripcion</span>
+          <input
+            value={draft.transcriptionEndpoint}
+            onChange={(event) => updateDraft("transcriptionEndpoint", event.target.value)}
+          />
+        </label>
+
+        <label>
+          <span>Autenticacion</span>
+          <select value={draft.authMode} onChange={(event) => updateDraft("authMode", event.target.value as AiSettings["authMode"])}>
+            <option value="bearer">Bearer token</option>
+            <option value="x-api-key">x-api-key</option>
+            <option value="query-key">Query param</option>
+            <option value="none">Sin clave</option>
+          </select>
+        </label>
+
+        <label>
           <span>
             <KeyRound aria-hidden="true" size={14} />
             Variable de clave
           </span>
           <input value={draft.apiKeyEnvVar} onChange={(event) => updateDraft("apiKeyEnvVar", event.target.value)} />
+        </label>
+
+        <label>
+          <span>Parametro query key</span>
+          <input value={draft.apiKeyQueryParam} onChange={(event) => updateDraft("apiKeyQueryParam", event.target.value)} />
         </label>
 
         <label>

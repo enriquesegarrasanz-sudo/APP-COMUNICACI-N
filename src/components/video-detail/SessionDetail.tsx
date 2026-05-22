@@ -4,6 +4,8 @@ import { useState } from "react";
 import {
   BarChart3,
   Brain,
+  Cloud,
+  FileAudio2,
   FileText,
   ListChecks,
   LoaderCircle,
@@ -16,10 +18,12 @@ import {
   Trash2,
 } from "lucide-react";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { compareSessions } from "@/lib/insights";
 import type { AiSettingsStatus, TranscriptionProvider, VideoEntry } from "@/types/video";
 
 type Props = {
   aiSettings: AiSettingsStatus;
+  previousVideo: VideoEntry | null;
   video: VideoEntry | null;
   onEntryChange: (entry: VideoEntry) => void;
   onDelete: (id: string) => void;
@@ -61,7 +65,99 @@ function toDraft(video: VideoEntry | null): Draft {
   };
 }
 
-export function SessionDetail({ aiSettings, video, onEntryChange, onDelete }: Props) {
+function formatBytes(value?: number) {
+  if (!value || value <= 0) {
+    return "";
+  }
+
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+type HealthTone = "ready" | "pending" | "error" | "muted";
+
+function getSessionHealth(video: VideoEntry) {
+  const mediaIsError = video.processingStatus === "error";
+  const transcriptReady = video.transcriptStatus === "ready";
+
+  return [
+    {
+      label: "Media",
+      status: mediaIsError ? "Error" : "Listo",
+      detail: mediaIsError ? "Procesado fallo" : formatBytes(video.compressedSize || video.size),
+      tone: mediaIsError ? "error" : "ready",
+    },
+    {
+      label: "Audio",
+      status: mediaIsError ? "Error" : video.audioFileName ? "Listo" : "Pendiente",
+      detail: video.audioFileName ? formatBytes(video.audioSize) : "Sin archivo ligero",
+      tone: mediaIsError ? "error" : video.audioFileName ? "ready" : "pending",
+    },
+    {
+      label: "Transcripcion",
+      status:
+        video.transcriptStatus === "ready"
+          ? "Lista"
+          : video.transcriptStatus === "processing"
+            ? "Procesando"
+            : video.transcriptStatus === "error"
+              ? "Error"
+              : "Pendiente",
+      detail: video.transcriptProvider ? video.transcriptProvider : "Sin proveedor",
+      tone:
+        video.transcriptStatus === "ready"
+          ? "ready"
+          : video.transcriptStatus === "error"
+            ? "error"
+            : "pending",
+    },
+    {
+      label: "Analisis",
+      status: video.analysis ? "Listo" : transcriptReady ? "Pendiente" : "En espera",
+      detail: video.analysis ? `${video.analysis.clarityScore}% claridad` : "Necesita transcripcion",
+      tone: video.analysis ? "ready" : transcriptReady ? "pending" : "muted",
+    },
+    {
+      label: "Drive",
+      status:
+        video.driveStatus === "uploaded"
+          ? "Subido"
+          : video.driveStatus === "error"
+            ? "Error"
+            : video.driveStatus === "disabled"
+              ? "Pausado"
+              : "Omitido",
+      detail: video.driveFileName ?? "Local",
+      tone: video.driveStatus === "uploaded" ? "ready" : video.driveStatus === "error" ? "error" : "muted",
+    },
+  ] satisfies Array<{ label: string; status: string; detail: string; tone: HealthTone }>;
+}
+
+function comparisonTone(value: number | null, lowerIsBetter = false) {
+  if (value === null || value === 0) {
+    return "is-neutral";
+  }
+
+  const isBetter = lowerIsBetter ? value < 0 : value > 0;
+  return isBetter ? "is-good" : "is-alert";
+}
+
+function formatSigned(value: number | null, suffix = "") {
+  if (value === null) {
+    return "-";
+  }
+
+  if (value === 0) {
+    return "igual";
+  }
+
+  return `${value > 0 ? "+" : ""}${value}${suffix}`;
+}
+
+export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange, onDelete }: Props) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(video));
   const [provider, setProvider] = useState<TranscriptionProvider>(
     aiSettings.apiKeyConfigured && aiSettings.transcriptionEnabled ? "ai-api" : "local",
@@ -195,6 +291,8 @@ export function SessionDetail({ aiSettings, video, onEntryChange, onDelete }: Pr
   }
 
   const analysis = currentVideo.analysis;
+  const healthItems = getSessionHealth(currentVideo);
+  const comparison = compareSessions(currentVideo, previousVideo);
 
   return (
     <section className="session-detail">
@@ -206,9 +304,101 @@ export function SessionDetail({ aiSettings, video, onEntryChange, onDelete }: Pr
         <StatusPill status={currentVideo.transcriptStatus} />
       </div>
 
+      <div className="session-insight-row">
+        <article className="session-health-panel">
+          <div className="panel-title">
+            <ListChecks aria-hidden="true" size={18} />
+            <h3>Semaforo de sesion</h3>
+          </div>
+          <div className="health-grid">
+            {healthItems.map((item) => (
+              <div className={`health-item is-${item.tone}`} key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.status}</strong>
+                <small>{item.detail}</small>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="session-comparison-panel">
+          <div className="panel-title">
+            <BarChart3 aria-hidden="true" size={18} />
+            <h3>{comparison ? `Comparacion con #${comparison.previousNumber}` : "Comparacion"}</h3>
+          </div>
+          {!comparison ? (
+            <p className="empty-line">Primera sesion guardada.</p>
+          ) : comparison.clarityDelta === null ? (
+            <p className="empty-line">La sesion anterior aun no tiene analisis comparable.</p>
+          ) : (
+            <div className="comparison-grid">
+              <span>
+                <small>Claridad</small>
+                <strong className={comparisonTone(comparison.clarityDelta)}>
+                  {formatSigned(comparison.clarityDelta, "%")}
+                </strong>
+              </span>
+              <span>
+                <small>Muletillas / 1000</small>
+                <strong className={comparisonTone(comparison.fillerRateDelta, true)}>
+                  {formatSigned(comparison.fillerRateDelta)}
+                </strong>
+              </span>
+              <span>
+                <small>Total muletillas</small>
+                <strong className={comparisonTone(comparison.fillerTotalDelta, true)}>
+                  {formatSigned(comparison.fillerTotalDelta)}
+                </strong>
+              </span>
+              <span>
+                <small>Palabras</small>
+                <strong>{formatSigned(comparison.wordCountDelta)}</strong>
+              </span>
+              {comparison.topFiller ? (
+                <span className="comparison-filler">
+                  <small>{comparison.topFiller.phrase}</small>
+                  <strong className={comparisonTone(comparison.topFiller.delta, true)}>
+                    {formatSigned(comparison.topFiller.delta)}
+                  </strong>
+                  <em>
+                    {comparison.topFiller.current} ahora / {comparison.topFiller.previous} antes
+                  </em>
+                </span>
+              ) : null}
+            </div>
+          )}
+        </article>
+      </div>
+
       <div className="detail-grid">
         <div className="video-surface">
           <video controls src={currentVideo.videoUrl} />
+          <div className="media-status-stack">
+            <span className={currentVideo.processingStatus === "error" ? "media-chip is-error" : "media-chip is-ready"}>
+              <FileAudio2 aria-hidden="true" size={15} />
+              {currentVideo.audioFileName ? `Audio ${formatBytes(currentVideo.audioSize)}` : "Audio pendiente"}
+            </span>
+            <span className={currentVideo.driveStatus === "error" ? "media-chip is-error" : "media-chip"}>
+              <Cloud aria-hidden="true" size={15} />
+              {currentVideo.driveStatus === "uploaded"
+                ? "Drive subido"
+                : currentVideo.driveStatus === "disabled"
+                  ? "Drive pausado"
+                  : currentVideo.driveStatus === "error"
+                    ? "Drive error"
+                    : "Drive omitido"}
+            </span>
+            {currentVideo.compressedSize ? (
+              <span className="media-chip">MP4 {formatBytes(currentVideo.compressedSize)}</span>
+            ) : null}
+            {currentVideo.driveWebViewLink ? (
+              <a className="media-chip is-link" href={currentVideo.driveWebViewLink} rel="noreferrer" target="_blank">
+                Abrir Drive
+              </a>
+            ) : null}
+          </div>
+          {currentVideo.processingError ? <p className="inline-error media-error">{currentVideo.processingError}</p> : null}
+          {currentVideo.driveError ? <p className="inline-error media-error">{currentVideo.driveError}</p> : null}
         </div>
 
         <div className="edit-surface">

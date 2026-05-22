@@ -4,11 +4,21 @@ export type TranscriptionProvider = "local" | "openai" | "ai-api";
 
 export type AiProviderKind = "openai" | "openai-compatible" | "anthropic" | "google" | "mistral" | "custom";
 
+export type AiAuthMode = "bearer" | "x-api-key" | "query-key" | "none";
+
+export type VideoProcessingStatus = "ready" | "error" | "skipped";
+
+export type DriveUploadStatus = "disabled" | "uploaded" | "error" | "skipped";
+
 export type AiSettings = {
   providerKind: AiProviderKind;
   providerName: string;
   baseUrl: string;
+  chatEndpoint: string;
+  transcriptionEndpoint: string;
+  authMode: AiAuthMode;
   apiKeyEnvVar: string;
+  apiKeyQueryParam: string;
   transcriptionModel: string;
   analysisModel: string;
   visionModel: string;
@@ -22,6 +32,22 @@ export type AiSettings = {
 
 export type AiSettingsStatus = AiSettings & {
   apiKeyConfigured: boolean;
+};
+
+export type DriveSettings = {
+  enabled: boolean;
+  folderId: string;
+  serviceAccountEmailEnvVar: string;
+  serviceAccountPrivateKeyEnvVar: string;
+  compressionCrf: number;
+  audioBitrateKbps: number;
+  deleteOriginalAfterProcessing: boolean;
+  updatedAt?: string;
+};
+
+export type DriveSettingsStatus = DriveSettings & {
+  credentialsConfigured: boolean;
+  ready: boolean;
 };
 
 export type FillerCount = {
@@ -65,8 +91,21 @@ export type VideoEntry = {
   videoUrl: string;
   originalFileName: string;
   storedFileName: string;
+  sourceFileName?: string;
+  audioFileName?: string;
+  audioUrl?: string;
   mimeType: string;
   size: number;
+  compressedSize?: number;
+  audioSize?: number;
+  processingStatus?: VideoProcessingStatus;
+  processingError?: string;
+  driveStatus?: DriveUploadStatus;
+  driveFileId?: string;
+  driveFileName?: string;
+  driveWebViewLink?: string;
+  driveError?: string;
+  driveUploadedAt?: string;
   notasMeGusto: string;
   notasMejorar: string;
   transcript: string;
@@ -82,4 +121,5 @@ export type VideoEntry = {
 export type AppDatabase = {
   videos: VideoEntry[];
   aiSettings: AiSettings;
+  driveSettings: DriveSettings;
 };

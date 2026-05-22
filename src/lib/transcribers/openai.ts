@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import OpenAI from "openai";
+import { PublicError } from "@/lib/security";
 
 export async function transcribeWithOpenAI(filePath: string) {
   if (!process.env.OPENAI_API_KEY) {
-    throw new Error("Falta OPENAI_API_KEY en .env.local.");
+    throw new PublicError("Falta OPENAI_API_KEY en .env.local.");
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -18,4 +19,3 @@ export async function transcribeWithOpenAI(filePath: string) {
 
   return String(response).trim();
 }
-

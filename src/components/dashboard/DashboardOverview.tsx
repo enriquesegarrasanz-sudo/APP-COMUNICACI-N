@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  CalendarDays,
   CircleDot,
   Filter,
   Gauge,
@@ -10,6 +11,7 @@ import {
   Sparkles,
   Tags,
 } from "lucide-react";
+import { buildFillerBank, buildWeeklySummaries } from "@/lib/insights";
 import type { VideoEntry } from "@/types/video";
 
 export type SessionClassifier = "all" | "analyzed" | "needs-analysis" | "ready" | "error";
@@ -72,19 +74,25 @@ function countForClassifier(videos: VideoEntry[], classifier: SessionClassifier)
   return videos.length;
 }
 
-function aggregateFillers(videos: VideoEntry[]) {
-  const counts = new Map<string, number>();
-
-  for (const video of videos) {
-    for (const filler of video.analysis?.topFillers ?? []) {
-      counts.set(filler.phrase, (counts.get(filler.phrase) ?? 0) + filler.count);
-    }
+function deltaClass(value: number | null, lowerIsBetter = false) {
+  if (value === null || value === 0) {
+    return "is-neutral";
   }
 
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([phrase, count]) => ({ phrase, count }));
+  const isBetter = lowerIsBetter ? value < 0 : value > 0;
+  return isBetter ? "is-good" : "is-alert";
+}
+
+function formatDelta(value: number | null, suffix = "") {
+  if (value === null) {
+    return "sin comparativa";
+  }
+
+  if (value === 0) {
+    return "igual";
+  }
+
+  return `${value > 0 ? "+" : ""}${value}${suffix}`;
 }
 
 export function DashboardOverview({
@@ -106,7 +114,8 @@ export function DashboardOverview({
   const totalWords = analyzed.reduce((total, video) => total + (video.analysis?.wordCount ?? 0), 0);
   const totalFillers = analyzed.reduce((total, video) => total + (video.analysis?.fillerTotal ?? 0), 0);
   const latest = sorted.slice(-4);
-  const topFillers = aggregateFillers(sorted);
+  const fillerBank = buildFillerBank(sorted, 6);
+  const weeklySummaries = buildWeeklySummaries(sorted, 5);
   const lastAnalyzed = analyzed[analyzed.length - 1] ?? null;
 
   const metrics = [
@@ -226,16 +235,24 @@ export function DashboardOverview({
         <article className="report-panel">
           <div className="panel-title">
             <CircleDot aria-hidden="true" size={18} />
-            <h3>Muletillas top</h3>
+            <h3>Banco de muletillas</h3>
           </div>
-          {topFillers.length === 0 ? (
+          {fillerBank.length === 0 ? (
             <p className="empty-line">Analiza una transcripcion para verlas.</p>
           ) : (
-            <div className="filler-stack">
-              {topFillers.map((item) => (
-                <div className="filler-row" key={item.phrase}>
-                  <span>{item.phrase}</span>
-                  <strong>{item.count}</strong>
+            <div className="filler-bank-list">
+              {fillerBank.map((item) => (
+                <div className="filler-bank-row" key={item.phrase}>
+                  <span>
+                    <strong>{item.phrase}</strong>
+                    <small>
+                      {item.sessionCount} sesiones - {item.perThousandWords}/1000 palabras
+                    </small>
+                  </span>
+                  <b>{item.totalCount}</b>
+                  <em className={item.hasPreviousSession ? deltaClass(item.delta, true) : "is-neutral"}>
+                    {item.hasPreviousSession ? formatDelta(item.delta) : `${item.latestCount} ult.`}
+                  </em>
                 </div>
               ))}
             </div>
@@ -258,6 +275,44 @@ export function DashboardOverview({
           )}
         </article>
       </div>
+
+      <article className="weekly-summary-panel">
+        <div className="panel-title">
+          <CalendarDays aria-hidden="true" size={18} />
+          <h3>Resumen semanal</h3>
+        </div>
+        {weeklySummaries.length === 0 ? (
+          <p className="empty-line">Todavia no hay semanas con sesiones.</p>
+        ) : (
+          <div className="week-stack">
+            {weeklySummaries.map((week) => (
+              <div className="week-row" key={week.key}>
+                <span className="week-main">
+                  <strong>{week.label}</strong>
+                  <small>
+                    {week.sessions} sesiones - {week.analyzed} analizadas
+                  </small>
+                </span>
+                <span>
+                  <small>Claridad</small>
+                  <strong>{week.averageClarity !== null ? `${week.averageClarity}%` : "-"}</strong>
+                  <em className={deltaClass(week.clarityDelta)}>{formatDelta(week.clarityDelta, "%")}</em>
+                </span>
+                <span>
+                  <small>Muletillas</small>
+                  <strong>{week.fillerRate !== null ? `${week.fillerRate}/1000` : "-"}</strong>
+                  <em className={deltaClass(week.fillerRateDelta, true)}>{formatDelta(week.fillerRateDelta)}</em>
+                </span>
+                <span>
+                  <small>Dominante</small>
+                  <strong>{week.topFiller ? week.topFiller.phrase : "-"}</strong>
+                  <em>{week.topFiller ? `${week.topFiller.count} usos` : "sin datos"}</em>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </article>
     </section>
   );
 }

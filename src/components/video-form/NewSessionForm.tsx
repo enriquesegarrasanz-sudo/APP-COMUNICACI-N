@@ -143,7 +143,7 @@ export function NewSessionForm({ onCreated }: Props) {
 
       <button className="primary-action" disabled={busy} type="submit">
         <Plus aria-hidden="true" size={18} />
-        {busy ? "Guardando" : "Crear sesion"}
+        {busy ? "Procesando" : "Crear sesion"}
       </button>
     </form>
   );

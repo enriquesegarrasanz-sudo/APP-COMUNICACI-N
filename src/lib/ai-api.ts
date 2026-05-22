@@ -1,9 +1,14 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { PublicError, requireSafeServiceUrl } from "@/lib/security";
 import type { AiSettings, AnalysisResult, VideoEntry } from "@/types/video";
 
 type ChatCompletionPayload = {
   choices?: Array<{ message?: { content?: string } }>;
+};
+
+type AnthropicPayload = {
+  content?: Array<{ text?: string; type?: string }>;
 };
 
 function endpoint(baseUrl: string, suffix: string) {
@@ -11,39 +16,48 @@ function endpoint(baseUrl: string, suffix: string) {
 }
 
 function requireApiKey(settings: AiSettings) {
+  if (settings.authMode === "none") {
+    return "";
+  }
+
   const apiKey = process.env[settings.apiKeyEnvVar];
 
   if (!apiKey) {
-    throw new Error(`Falta ${settings.apiKeyEnvVar} en .env.local para usar ${settings.providerName}.`);
+    throw new PublicError(`Falta ${settings.apiKeyEnvVar} en .env.local para usar ${settings.providerName}.`);
   }
 
   return apiKey;
 }
 
 function authorizationHeaders(settings: AiSettings, apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+
   if (settings.providerKind === "anthropic") {
-    return {
-      "anthropic-version": "2023-06-01",
-      "x-api-key": apiKey,
-    };
+    headers["anthropic-version"] = "2023-06-01";
   }
 
-  if (settings.providerKind === "google") {
-    return {};
+  if (settings.authMode === "bearer") {
+    headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  return { Authorization: `Bearer ${apiKey}` };
+  if (settings.authMode === "x-api-key") {
+    headers["x-api-key"] = apiKey;
+  }
+
+  return headers;
 }
 
 function apiUrl(settings: AiSettings, suffix: string, apiKey: string) {
   const url = endpoint(settings.baseUrl, suffix);
 
-  if (settings.providerKind !== "google") {
-    return url;
+  if (settings.authMode !== "query-key") {
+    return requireSafeServiceUrl(url);
   }
 
   const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}key=${encodeURIComponent(apiKey)}`;
+  return requireSafeServiceUrl(
+    `${url}${separator}${encodeURIComponent(settings.apiKeyQueryParam)}=${encodeURIComponent(apiKey)}`,
+  );
 }
 
 function parseNotes(content: string) {
@@ -109,7 +123,7 @@ function buildAnalysisPrompt(entry: VideoEntry, analysis: AnalysisResult, settin
 
 export async function transcribeWithConfiguredAi(filePath: string, settings: AiSettings) {
   if (!settings.transcriptionEnabled) {
-    throw new Error("La transcripcion por API esta desactivada en Conexiones IA.");
+    throw new PublicError("La transcripcion por API esta desactivada en Conexiones IA.");
   }
 
   const apiKey = requireApiKey(settings);
@@ -127,14 +141,14 @@ export async function transcribeWithConfiguredAi(filePath: string, settings: AiS
     "Transcribe en espanol de forma fiel. Conserva muletillas, pausas habladas y expresiones como um, eh, vale, o sea, sabes, pues, digamos.",
   );
 
-  const response = await fetch(apiUrl(settings, "audio/transcriptions", apiKey), {
+  const response = await fetch(apiUrl(settings, settings.transcriptionEndpoint, apiKey), {
     method: "POST",
     headers: authorizationHeaders(settings, apiKey),
     body: form,
   });
 
   if (!response.ok) {
-    throw new Error(`${settings.providerName} transcripcion fallo: ${response.status}`);
+    throw new PublicError(`${settings.providerName} transcripcion fallo: ${response.status}`);
   }
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -149,7 +163,7 @@ export async function transcribeWithConfiguredAi(filePath: string, settings: AiS
 
 export async function getAiCoachNotes(entry: VideoEntry, analysis: AnalysisResult, settings: AiSettings) {
   if (!settings.transcriptAnalysisEnabled) {
-    throw new Error("El analisis de transcripcion por IA esta desactivado en Conexiones IA.");
+    throw new PublicError("El analisis de transcripcion por IA esta desactivado en Conexiones IA.");
   }
 
   if (entry.transcript.trim().length < 40) {
@@ -158,7 +172,33 @@ export async function getAiCoachNotes(entry: VideoEntry, analysis: AnalysisResul
 
   const apiKey = requireApiKey(settings);
   const messages = buildAnalysisPrompt(entry, analysis, settings);
-  const response = await fetch(apiUrl(settings, "chat/completions", apiKey), {
+
+  if (settings.providerKind === "anthropic") {
+    const [systemMessage, userMessage] = messages;
+    const response = await fetch(apiUrl(settings, settings.chatEndpoint, apiKey), {
+      method: "POST",
+      headers: {
+        ...authorizationHeaders(settings, apiKey),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: settings.analysisModel,
+        max_tokens: 700,
+        system: systemMessage.content,
+        messages: [{ role: "user", content: userMessage.content }],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new PublicError(`${settings.providerName} analisis fallo: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as AnthropicPayload;
+    const content = payload.content?.find((item) => typeof item.text === "string")?.text;
+    return content ? parseNotes(content) : null;
+  }
+
+  const response = await fetch(apiUrl(settings, settings.chatEndpoint, apiKey), {
     method: "POST",
     headers: {
       ...authorizationHeaders(settings, apiKey),
@@ -172,7 +212,7 @@ export async function getAiCoachNotes(entry: VideoEntry, analysis: AnalysisResul
   });
 
   if (!response.ok) {
-    throw new Error(`${settings.providerName} analisis fallo: ${response.status}`);
+    throw new PublicError(`${settings.providerName} analisis fallo: ${response.status}`);
   }
 
   const payload = (await response.json()) as ChatCompletionPayload;

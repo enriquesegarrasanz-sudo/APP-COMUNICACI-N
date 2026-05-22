@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { PublicError } from "@/lib/security";
 
 function splitCommand(command: string) {
   const parts: string[] = [];
@@ -53,7 +54,7 @@ export async function transcribeWithLocalWhisper(filePath: string) {
   const commandParts = splitCommand(process.env.WHISPER_COMMAND || "whisper");
 
   if (commandParts.length === 0) {
-    throw new Error("Configura WHISPER_COMMAND en .env.local.");
+    throw new PublicError("Configura WHISPER_COMMAND en .env.local.");
   }
 
   const outputDir = path.join(process.cwd(), "data", "transcripts");
@@ -84,4 +85,3 @@ export async function transcribeWithLocalWhisper(filePath: string) {
     return result.stdout.trim();
   }
 }
-

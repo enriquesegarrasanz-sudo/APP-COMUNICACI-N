@@ -23,6 +23,8 @@ Rellena `OPENAI_API_KEY` directamente en Vercel con tu clave real. No la guardes
 
 No importes `WHISPER_COMMAND` ni `WHISPER_MODEL` en Vercel: Whisper local solo funciona en tu ordenador porque depende de un binario instalado en la maquina.
 
+No actives `APP_ALLOW_REMOTE_WRITE=true` en Vercel salvo que pongas autenticacion delante. Por defecto, las rutas que crean, editan, borran o cambian configuracion solo aceptan escrituras desde `localhost`.
+
 ## Sincronizar Variables A Local
 
 Despues de crear el proyecto en Vercel, puedes traer las variables de Development a tu ordenador con:

@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { deleteVideoEntry, getVideoEntry, updateVideoEntry } from "@/lib/storage";
+import { deleteVideoEntry, getVideoEntry, sanitizeVideoPatch, updateVideoEntry } from "@/lib/storage";
+import {
+  logUnexpectedError,
+  publicErrorMessage,
+  publicErrorStatus,
+  readJsonObject,
+  requireLocalWriteRequest,
+} from "@/lib/security";
 import type { VideoEntry } from "@/types/video";
 
 export const runtime = "nodejs";
@@ -21,34 +28,38 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const { id } = await context.params;
-  const body = (await request.json()) as Partial<VideoEntry>;
-  const allowedPatch: Partial<VideoEntry> = {
-    titulo: typeof body.titulo === "string" ? body.titulo.trim() : undefined,
-    tema: typeof body.tema === "string" ? body.tema.trim() : undefined,
-    fecha: typeof body.fecha === "string" ? body.fecha : undefined,
-    etiquetas: Array.isArray(body.etiquetas) ? body.etiquetas.map(String) : undefined,
-    notasMeGusto: typeof body.notasMeGusto === "string" ? body.notasMeGusto : undefined,
-    notasMejorar: typeof body.notasMejorar === "string" ? body.notasMejorar : undefined,
-    transcript: typeof body.transcript === "string" ? body.transcript : undefined,
-  };
+  const blocked = requireLocalWriteRequest(request);
 
-  Object.keys(allowedPatch).forEach((key) => {
-    if (allowedPatch[key as keyof VideoEntry] === undefined) {
-      delete allowedPatch[key as keyof VideoEntry];
-    }
-  });
-
-  const entry = await updateVideoEntry(id, allowedPatch);
-
-  if (!entry) {
-    return NextResponse.json({ error: "Video no encontrado." }, { status: 404 });
+  if (blocked) {
+    return blocked;
   }
 
-  return NextResponse.json({ entry });
+  try {
+    const { id } = await context.params;
+    const body = await readJsonObject<Partial<VideoEntry>>(request);
+    const entry = await updateVideoEntry(id, sanitizeVideoPatch(body));
+
+    if (!entry) {
+      return NextResponse.json({ error: "Video no encontrado." }, { status: 404 });
+    }
+
+    return NextResponse.json({ entry });
+  } catch (error) {
+    logUnexpectedError("videos.update", error);
+    return NextResponse.json(
+      { error: publicErrorMessage(error, "No se pudo guardar el video.") },
+      { status: publicErrorStatus(error, 400) },
+    );
+  }
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
+  const blocked = requireLocalWriteRequest(_request);
+
+  if (blocked) {
+    return blocked;
+  }
+
   const { id } = await context.params;
   const deleted = await deleteVideoEntry(id);
 
@@ -58,4 +69,3 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   return NextResponse.json({ ok: true });
 }
-
