@@ -54,6 +54,15 @@ const audioExtensions = new Set([".aac", ".m4a", ".mp3", ".ogg", ".wav"]);
 
 let databaseQueue = Promise.resolve();
 
+function defaultDatabase(): AppDatabase {
+  return { videos: [], aiSettings: defaultAiSettings, driveSettings: defaultDriveSettings };
+}
+
+function isStoreUnavailableError(error: unknown) {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  return code === "ENOENT" || code === "EROFS" || code === "EACCES" || code === "EPERM";
+}
+
 function withDatabaseLock<T>(operation: () => Promise<T>) {
   const queued = databaseQueue.then(operation, operation);
   databaseQueue = queued.then(
@@ -63,19 +72,19 @@ function withDatabaseLock<T>(operation: () => Promise<T>) {
   return queued;
 }
 
-async function ensureStore() {
+async function ensureDatabaseFile() {
   await fs.mkdir(dataDir, { recursive: true });
-  await fs.mkdir(uploadDir, { recursive: true });
 
   try {
     await fs.access(appFile);
   } catch {
-    await fs.writeFile(
-      appFile,
-      JSON.stringify({ videos: [], aiSettings: defaultAiSettings, driveSettings: defaultDriveSettings }, null, 2),
-      "utf8",
-    );
+    await fs.writeFile(appFile, JSON.stringify(defaultDatabase(), null, 2), "utf8");
   }
+}
+
+async function ensureStore() {
+  await ensureDatabaseFile();
+  await fs.mkdir(uploadDir, { recursive: true });
 }
 
 function stringOrDefault(value: unknown, fallback: string) {
@@ -194,8 +203,27 @@ function normalizeDriveSettings(value: unknown, strict = false): DriveSettings {
 }
 
 async function readDatabase(): Promise<AppDatabase> {
-  await ensureStore();
-  const raw = await fs.readFile(appFile, "utf8");
+  try {
+    await ensureDatabaseFile();
+  } catch (error) {
+    if (isStoreUnavailableError(error)) {
+      return defaultDatabase();
+    }
+
+    throw error;
+  }
+
+  let raw: string;
+
+  try {
+    raw = await fs.readFile(appFile, "utf8");
+  } catch (error) {
+    if (isStoreUnavailableError(error)) {
+      return defaultDatabase();
+    }
+
+    throw error;
+  }
 
   try {
     const parsed = JSON.parse(raw) as Partial<AppDatabase>;
@@ -205,13 +233,21 @@ async function readDatabase(): Promise<AppDatabase> {
       driveSettings: normalizeDriveSettings(parsed.driveSettings),
     };
   } catch {
-    return { videos: [], aiSettings: defaultAiSettings, driveSettings: defaultDriveSettings };
+    return defaultDatabase();
   }
 }
 
 async function writeDatabase(database: AppDatabase) {
-  await ensureStore();
-  await fs.writeFile(appFile, JSON.stringify(database, null, 2), "utf8");
+  try {
+    await ensureDatabaseFile();
+    await fs.writeFile(appFile, JSON.stringify(database, null, 2), "utf8");
+  } catch (error) {
+    if (isStoreUnavailableError(error)) {
+      throw new PublicError("No se pudo guardar en el almacenamiento local de esta ejecucion.");
+    }
+
+    throw error;
+  }
 }
 
 function safeFileName(fileName: string) {
