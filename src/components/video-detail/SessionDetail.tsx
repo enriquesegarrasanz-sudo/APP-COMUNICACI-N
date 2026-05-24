@@ -147,19 +147,42 @@ function formatBytes(value?: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function isDriveBacked(video: VideoEntry) {
+  return Boolean(video.storageDriver === "drive" || video.driveOriginalFileId || video.driveCompressedFileId || video.driveAudioFileId);
+}
+
+function mediaKind(video: VideoEntry) {
+  return video.mimeType.startsWith("audio/") && !video.driveCompressedFileId ? "audio" : "video";
+}
+
+function playableMediaSrc(video: VideoEntry) {
+  if (isDriveBacked(video)) {
+    return `/api/videos/${video.id}/media?kind=${mediaKind(video)}&v=${encodeURIComponent(video.updatedAt)}`;
+  }
+
+  return video.videoUrl;
+}
+
 type HealthTone = "ready" | "pending" | "error" | "muted";
 
 function getSessionHealth(video: VideoEntry) {
   const mediaIsError = video.processingStatus === "error";
   const mediaIsPending = video.processingStatus === "pending";
+  const driveOriginalReady = Boolean(video.driveOriginalFileId || video.driveFileId);
   const transcriptReady = video.transcriptStatus === "ready";
 
   return [
     {
       label: "Media",
-      status: mediaIsError ? "Error" : mediaIsPending ? "Pendiente" : "Listo",
-      detail: mediaIsError ? "Procesado fallo" : mediaIsPending ? "Worker local" : formatBytes(video.compressedSize || video.size),
-      tone: mediaIsError ? "error" : mediaIsPending ? "pending" : "ready",
+      status: mediaIsError ? "Error" : mediaIsPending && driveOriginalReady ? "Original" : mediaIsPending ? "Pendiente" : "Listo",
+      detail: mediaIsError
+        ? "Procesado fallo"
+        : mediaIsPending && driveOriginalReady
+          ? "Drive reproducible"
+          : mediaIsPending
+            ? "Worker local"
+            : formatBytes(video.compressedSize || video.size),
+      tone: mediaIsError ? "error" : driveOriginalReady || !mediaIsPending ? "ready" : "pending",
     },
     {
       label: "Audio",
@@ -422,6 +445,8 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
   const analysis = currentVideo.analysis;
   const healthItems = getSessionHealth(currentVideo);
   const comparison = compareSessions(currentVideo, previousVideo);
+  const mediaSrc = playableMediaSrc(currentVideo);
+  const currentMediaKind = mediaKind(currentVideo);
   const autosaveBusy = autosave.status === "pending" || autosave.status === "saving";
   const autosaveText = autosaveLabel(autosave.status, autosave.dirty, autosave.error);
   const autosaveClassName = autosave.status === "error" ? "autosave-chip is-error" : "autosave-chip";
@@ -504,18 +529,22 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
 
       <div className="detail-grid">
         <div className="video-surface">
-          {currentVideo.videoUrl ? (
-            <video controls src={currentVideo.videoUrl} />
+          {mediaSrc ? (
+            currentMediaKind === "audio" ? (
+              <audio controls src={mediaSrc} />
+            ) : (
+              <video controls src={mediaSrc} />
+            )
           ) : (
             <div className="video-placeholder">
               <Cloud aria-hidden="true" size={28} />
               <strong>
-                {currentVideo.processingStatus === "ready" ? "Resultado guardado en Drive" : "Original guardado en Drive"}
+                {currentVideo.processingStatus === "ready" ? "Resultado guardado en Drive" : "Original pendiente en Drive"}
               </strong>
               <span>
                 {currentVideo.processingStatus === "ready"
-                  ? "Abre el MP4 comprimido desde el enlace Drive."
-                  : "Pendiente de compresion por el worker local."}
+                  ? "No se encontro un archivo reproducible para esta sesion."
+                  : "La subida aun no termino o no devolvio ID de archivo."}
               </span>
             </div>
           )}
@@ -638,7 +667,7 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
               {autosaveBusy ? <LoaderCircle aria-hidden="true" size={15} /> : null}
               {autosaveText}
             </span>
-            <span className="local-transcription-chip">Whisper local</span>
+            <span className="local-transcription-chip">Whisper {aiSettings.whisperModel}</span>
             <button className="secondary-action" disabled={transcribeDisabled} onClick={transcribe} type="button">
               {transcribing ? (
                 <LoaderCircle aria-hidden="true" size={17} />

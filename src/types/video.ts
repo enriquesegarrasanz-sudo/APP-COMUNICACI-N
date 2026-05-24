@@ -34,6 +34,9 @@ export type AiSettings = {
   transcriptionModel: string;
   analysisModel: string;
   visionModel: string;
+  ollamaStartCommand: string;
+  whisperCommand: string;
+  whisperModel: string;
   transcriptionEnabled: boolean;
   transcriptAnalysisEnabled: boolean;
   videoAnalysisEnabled: boolean;

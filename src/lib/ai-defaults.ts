@@ -6,6 +6,10 @@ export const defaultApplicationContext =
   "No debe inventar informacion del video ni corregir la transcripcion como si hubiera escuchado el audio. " +
   "Debe devolver consejos breves, concretos y accionables para la siguiente grabacion.";
 
+export const defaultOllamaStartCommand = "ollama serve";
+export const defaultWhisperCommand = "whisper";
+export const defaultWhisperModel = "base";
+
 export const deepseekAiSettings: AiSettings = {
   providerKind: "deepseek",
   providerName: "DeepSeek",
@@ -18,6 +22,9 @@ export const deepseekAiSettings: AiSettings = {
   transcriptionModel: "whisper-local",
   analysisModel: "deepseek-v4-flash",
   visionModel: "no-disponible",
+  ollamaStartCommand: defaultOllamaStartCommand,
+  whisperCommand: defaultWhisperCommand,
+  whisperModel: defaultWhisperModel,
   transcriptionEnabled: false,
   transcriptAnalysisEnabled: true,
   videoAnalysisEnabled: false,
@@ -37,6 +44,9 @@ export const ollamaAiSettings: AiSettings = {
   transcriptionModel: "whisper-local",
   analysisModel: "qwen3:14b",
   visionModel: "qwen3-vl:8b",
+  ollamaStartCommand: defaultOllamaStartCommand,
+  whisperCommand: defaultWhisperCommand,
+  whisperModel: defaultWhisperModel,
   transcriptionEnabled: false,
   transcriptAnalysisEnabled: true,
   videoAnalysisEnabled: false,

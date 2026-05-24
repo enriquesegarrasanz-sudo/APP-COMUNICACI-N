@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { ensureOllamaAvailable } from "@/lib/local-processes";
 import { PublicError, requireSafeServiceUrl } from "@/lib/security";
 import type { AiSettings, AnalysisResult, VideoEntry } from "@/types/video";
 
@@ -31,7 +32,7 @@ function endpoint(baseUrl: string, suffix: string) {
 
 function providerBaseUrl(settings: AiSettings) {
   if (settings.providerKind === "ollama") {
-    return process.env.OLLAMA_BASE_URL || settings.baseUrl;
+    return settings.baseUrl || process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
   }
 
   return settings.baseUrl;
@@ -228,6 +229,8 @@ export async function getAiCoachNotes(entry: VideoEntry, analysis: AnalysisResul
   const messages = buildAnalysisPrompt(entry, analysis, settings);
 
   if (settings.providerKind === "ollama") {
+    await ensureOllamaAvailable(settings);
+
     const response = await fetch(apiUrl(settings, settings.chatEndpoint, ""), {
       method: "POST",
       headers: {

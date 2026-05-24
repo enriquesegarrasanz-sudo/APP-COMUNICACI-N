@@ -1,19 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { defaultWhisperCommand, defaultWhisperModel } from "@/lib/ai-defaults";
+import { splitCommand } from "@/lib/local-processes";
 import { PublicError } from "@/lib/security";
-
-function splitCommand(command: string) {
-  const parts: string[] = [];
-  const pattern = /"([^"]+)"|'([^']+)'|(\S+)/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(command)) !== null) {
-    parts.push(match[1] || match[2] || match[3]);
-  }
-
-  return parts;
-}
+import type { AiSettings } from "@/types/video";
 
 async function runProcess(command: string, args: string[]) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
@@ -64,21 +55,17 @@ async function runProcess(command: string, args: string[]) {
   });
 }
 
-function defaultWhisperCommand() {
-  return process.platform === "win32" ? "py -m whisper" : "whisper";
-}
-
-export async function transcribeWithLocalWhisper(filePath: string) {
-  const commandParts = splitCommand(process.env.WHISPER_COMMAND || defaultWhisperCommand());
+export async function transcribeWithLocalWhisper(filePath: string, settings?: AiSettings) {
+  const commandParts = splitCommand(settings?.whisperCommand || process.env.WHISPER_COMMAND || defaultWhisperCommand);
 
   if (commandParts.length === 0) {
-    throw new PublicError("Configura WHISPER_COMMAND en .env.local.");
+    throw new PublicError("Configura el comando de Whisper en Ajustes de IA.");
   }
 
   const outputDir = path.join(process.cwd(), "data", "transcripts");
   await fs.mkdir(outputDir, { recursive: true });
 
-  const model = process.env.WHISPER_MODEL || "base";
+  const model = settings?.whisperModel || process.env.WHISPER_MODEL || defaultWhisperModel;
   const command = commandParts[0];
   const args = [
     ...commandParts.slice(1),

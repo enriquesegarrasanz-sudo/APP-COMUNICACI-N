@@ -47,15 +47,10 @@ function readOAuthRedirectMessage(): string {
   return "";
 }
 
-let initialRedirectMessage = "";
-
 export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
   const [draft, setDraft] = useState<DriveSettingsStatus>(() => initialSettings ?? fallbackDriveSettings);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState(() => {
-    initialRedirectMessage = readOAuthRedirectMessage();
-    return initialRedirectMessage;
-  });
+  const [message, setMessage] = useState("");
 
   const refreshOAuthStatus = useCallback(async () => {
     try {
@@ -74,11 +69,14 @@ export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
   }, []);
 
   useEffect(() => {
-    if (initialRedirectMessage) {
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-
     const timer = setTimeout(() => {
+      const redirectMessage = readOAuthRedirectMessage();
+
+      if (redirectMessage) {
+        setMessage(redirectMessage);
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+
       refreshOAuthStatus();
     }, 0);
     return () => clearTimeout(timer);

@@ -343,6 +343,20 @@ export async function downloadDriveFileToPath({ fileId, filePath }: { fileId: st
   await fs.writeFile(filePath, Buffer.from(await response.arrayBuffer()));
 }
 
+export async function fetchDriveFileMedia({ fileId, range }: { fileId: string; range?: string | null }) {
+  const accessToken = await getGoogleDriveAccessToken();
+  const headers = new Headers({ Authorization: `Bearer ${accessToken}` });
+
+  if (range) {
+    headers.set("Range", range);
+  }
+
+  return fetch(`${driveApiBase}/files/${fileId}?alt=media`, {
+    method: "GET",
+    headers,
+  });
+}
+
 async function uploadFileToDriveFolder({
   fileName,
   filePath,

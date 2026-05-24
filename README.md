@@ -17,6 +17,8 @@ Copia `.env.example` a `.env.local` y rellena lo que vayas a usar.
 
 ### Whisper Local
 
+Puedes cambiar el comando y el modelo desde `Crear > Conectar con IA`. Las variables de entorno quedan como valores iniciales o fallback local.
+
 ```env
 WHISPER_COMMAND=whisper
 WHISPER_MODEL=base
@@ -34,6 +36,7 @@ WHISPER_MODEL=base
 ### Analisis IA: DeepSeek U Ollama
 
 La transcripcion usa Whisper local. Despues puedes analizar la transcripcion con DeepSeek API o con Ollama local.
+Si eliges Ollama en el panel, la app comprueba el servidor local y puede arrancarlo con el comando configurado, por defecto `ollama serve`.
 
 ```env
 DEEPSEEK_API_KEY=tu_api_key

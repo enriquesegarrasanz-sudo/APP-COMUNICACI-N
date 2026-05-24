@@ -9,8 +9,10 @@ import {
   History,
   KeyRound,
   LoaderCircle,
+  RefreshCw,
   Save,
   Server,
+  Terminal,
 } from "lucide-react";
 import { deepseekAiSettings, defaultAiSettings, ollamaAiSettings, ollamaAnalysisModels } from "@/lib/ai-defaults";
 import type { AiSettingsStatus } from "@/types/video";
@@ -26,6 +28,7 @@ const fallbackAiSettings: AiSettingsStatus = {
 };
 
 type SupportedProvider = "deepseek" | "ollama";
+type LocalToolAction = "ollama" | "whisper";
 
 export function AiSettingsPanel({ initialSettings, onSaved }: Props) {
   const [draft, setDraft] = useState<AiSettingsStatus>(() => initialSettings ?? fallbackAiSettings);
@@ -33,19 +36,39 @@ export function AiSettingsPanel({ initialSettings, onSaved }: Props) {
     () => initialSettings?.providerKind !== "ollama" && Boolean(initialSettings?.apiKeyConfigured),
   );
   const [saving, setSaving] = useState(false);
+  const [checkingTool, setCheckingTool] = useState<LocalToolAction | "">("");
   const [message, setMessage] = useState("");
   const selectedProvider: SupportedProvider = draft.providerKind === "ollama" ? "ollama" : "deepseek";
   const isOllama = selectedProvider === "ollama";
   const providerReady = isOllama ? true : draft.apiKeyConfigured;
+  const messageIsSuccess =
+    message.includes("conectado") ||
+    message.includes("responde") ||
+    message.includes("inicio") ||
+    message.includes("lista");
 
   function selectProvider(provider: SupportedProvider) {
     const preset = provider === "ollama" ? ollamaAiSettings : deepseekAiSettings;
 
     setDraft({
       ...preset,
+      ollamaStartCommand: draft.ollamaStartCommand,
+      whisperCommand: draft.whisperCommand,
+      whisperModel: draft.whisperModel,
       apiKeyConfigured: provider === "ollama" ? true : deepseekKeyConfigured,
     });
     setMessage("");
+  }
+
+  function localSettingsPayload() {
+    return {
+      analysisModel: draft.analysisModel,
+      baseUrl: draft.baseUrl,
+      ollamaStartCommand: draft.ollamaStartCommand,
+      providerKind: selectedProvider,
+      whisperCommand: draft.whisperCommand,
+      whisperModel: draft.whisperModel,
+    };
   }
 
   async function saveSettings() {
@@ -57,8 +80,7 @@ export function AiSettingsPanel({ initialSettings, onSaved }: Props) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          providerKind: selectedProvider,
-          analysisModel: draft.analysisModel,
+          ...localSettingsPayload(),
         }),
       });
       const payload = (await response.json()) as { settings?: AiSettingsStatus; error?: string };
@@ -82,6 +104,33 @@ export function AiSettingsPanel({ initialSettings, onSaved }: Props) {
     }
   }
 
+  async function checkLocalTool(action: LocalToolAction) {
+    setCheckingTool(action);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/settings/ai/local-tools", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          settings: localSettingsPayload(),
+        }),
+      });
+      const payload = (await response.json()) as { result?: { detail?: string }; error?: string };
+
+      if (!response.ok || !payload.result) {
+        throw new Error(payload.error || "No se pudo comprobar la herramienta local.");
+      }
+
+      setMessage(payload.result.detail || "Herramienta local lista.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo comprobar la herramienta local.");
+    } finally {
+      setCheckingTool("");
+    }
+  }
+
   return (
     <section className="ai-settings-panel" aria-label="Conectar con IA">
       <div className="section-heading">
@@ -101,7 +150,7 @@ export function AiSettingsPanel({ initialSettings, onSaved }: Props) {
           )}
           {isOllama ? "Local sin clave" : draft.apiKeyConfigured ? "Clave detectada" : "Clave pendiente"}
         </span>
-        <small>{isOllama ? "OLLAMA http://127.0.0.1:11434" : "DEEPSEEK_API_KEY"}</small>
+        <small>{isOllama ? draft.baseUrl : "DEEPSEEK_API_KEY"}</small>
       </div>
 
       <div className="ai-provider-grid" aria-label="Proveedor de analisis IA">
@@ -143,23 +192,63 @@ export function AiSettingsPanel({ initialSettings, onSaved }: Props) {
       </div>
 
       {isOllama ? (
-        <label className="model-select">
-          <span>
-            <History aria-hidden="true" size={16} />
-            Modelo Qwen
-          </span>
-          <select
-            value={draft.analysisModel}
-            onChange={(event) => setDraft((current) => ({ ...current, analysisModel: event.target.value }))}
+        <div className="settings-grid local-tool-grid">
+          <label className="model-select">
+            <span>
+              <History aria-hidden="true" size={16} />
+              Modelo Qwen
+            </span>
+            <select
+              value={draft.analysisModel}
+              onChange={(event) => setDraft((current) => ({ ...current, analysisModel: event.target.value }))}
+            >
+              {ollamaAnalysisModels.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+            </select>
+            <small>Recomendado: qwen3:14b para coaching textual. qwen3-vl:8b queda preparado para vision.</small>
+          </label>
+
+          <label>
+            <span>
+              <Server aria-hidden="true" size={16} />
+              URL Ollama
+            </span>
+            <input
+              value={draft.baseUrl}
+              onChange={(event) => setDraft((current) => ({ ...current, baseUrl: event.target.value }))}
+            />
+          </label>
+
+          <label>
+            <span>
+              <Terminal aria-hidden="true" size={16} />
+              Comando Ollama
+            </span>
+            <input
+              value={draft.ollamaStartCommand}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, ollamaStartCommand: event.target.value }))
+              }
+            />
+          </label>
+
+          <button
+            className="secondary-action"
+            disabled={saving || checkingTool !== ""}
+            onClick={() => void checkLocalTool("ollama")}
+            type="button"
           >
-            {ollamaAnalysisModels.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </select>
-          <small>Recomendado: qwen3:14b para coaching textual. qwen3-vl:8b queda preparado para vision.</small>
-        </label>
+            {checkingTool === "ollama" ? (
+              <LoaderCircle aria-hidden="true" size={17} />
+            ) : (
+              <RefreshCw aria-hidden="true" size={17} />
+            )}
+            Probar Ollama
+          </button>
+        </div>
       ) : (
         <div className="deepseek-summary">
           <span>
@@ -171,9 +260,54 @@ export function AiSettingsPanel({ initialSettings, onSaved }: Props) {
         </div>
       )}
 
-      {message ? <p className={message.includes("conectado") ? "inline-message" : "inline-error"}>{message}</p> : null}
+      <div className="deepseek-summary">
+        <span>
+          <Terminal aria-hidden="true" size={16} />
+          Whisper local
+        </span>
+        <strong>{draft.whisperModel}</strong>
+        <small>La transcripcion se ejecuta con un comando local antes de guardar el texto.</small>
+      </div>
 
-      <button className="secondary-action" disabled={saving} onClick={saveSettings} type="button">
+      <div className="settings-grid local-tool-grid">
+        <label>
+          <span>
+            <Terminal aria-hidden="true" size={16} />
+            Comando Whisper
+          </span>
+          <input
+            value={draft.whisperCommand}
+            onChange={(event) => setDraft((current) => ({ ...current, whisperCommand: event.target.value }))}
+          />
+        </label>
+        <label>
+          <span>
+            <History aria-hidden="true" size={16} />
+            Modelo Whisper
+          </span>
+          <input
+            value={draft.whisperModel}
+            onChange={(event) => setDraft((current) => ({ ...current, whisperModel: event.target.value }))}
+          />
+        </label>
+        <button
+          className="secondary-action"
+          disabled={saving || checkingTool !== ""}
+          onClick={() => void checkLocalTool("whisper")}
+          type="button"
+        >
+          {checkingTool === "whisper" ? (
+            <LoaderCircle aria-hidden="true" size={17} />
+          ) : (
+            <RefreshCw aria-hidden="true" size={17} />
+          )}
+          Probar Whisper
+        </button>
+      </div>
+
+      {message ? <p className={messageIsSuccess ? "inline-message" : "inline-error"}>{message}</p> : null}
+
+      <button className="secondary-action" disabled={saving || checkingTool !== ""} onClick={saveSettings} type="button">
         {saving ? <LoaderCircle aria-hidden="true" size={17} /> : <Save aria-hidden="true" size={17} />}
         Guardar conexion IA
       </button>

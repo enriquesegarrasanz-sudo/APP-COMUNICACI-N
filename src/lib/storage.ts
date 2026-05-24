@@ -1,6 +1,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { defaultAiSettings, defaultDriveSettings, getAiSettingsPreset } from "@/lib/ai-defaults";
+import {
+  defaultAiSettings,
+  defaultDriveSettings,
+  defaultOllamaStartCommand,
+  defaultWhisperCommand,
+  defaultWhisperModel,
+  getAiSettingsPreset,
+} from "@/lib/ai-defaults";
 import {
   createDriveResumableUploadSession,
   deleteDriveFile,
@@ -45,6 +52,7 @@ const textLimits = {
   baseUrl: 300,
   endpoint: 160,
   model: 120,
+  localCommand: 260,
   envVar: 64,
   queryParam: 80,
   applicationContext: 4000,
@@ -236,6 +244,59 @@ function normalizeAiSettings(value: unknown): AiSettings {
 
   return {
     ...preset,
+    providerName: boundedStringOrDefault(input.providerName, preset.providerName, textLimits.providerName, "Proveedor IA"),
+    baseUrl: boundedStringOrDefault(input.baseUrl, preset.baseUrl, textLimits.baseUrl, "URL del proveedor"),
+    chatEndpoint: boundedStringOrDefault(input.chatEndpoint, preset.chatEndpoint, textLimits.endpoint, "Endpoint de chat"),
+    transcriptionEndpoint: boundedStringOrDefault(
+      input.transcriptionEndpoint,
+      preset.transcriptionEndpoint,
+      textLimits.endpoint,
+      "Endpoint de transcripcion",
+    ),
+    authMode: input.authMode ?? preset.authMode,
+    apiKeyEnvVar: boundedStringOrDefault(input.apiKeyEnvVar, preset.apiKeyEnvVar, textLimits.envVar, "Variable API key"),
+    apiKeyQueryParam: boundedStringOrDefault(
+      input.apiKeyQueryParam,
+      preset.apiKeyQueryParam,
+      textLimits.queryParam,
+      "Parametro API key",
+    ),
+    transcriptionModel: boundedStringOrDefault(
+      input.transcriptionModel,
+      preset.transcriptionModel,
+      textLimits.model,
+      "Modelo de transcripcion",
+    ),
+    analysisModel: boundedStringOrDefault(input.analysisModel, preset.analysisModel, textLimits.model, "Modelo de analisis"),
+    visionModel: boundedStringOrDefault(input.visionModel, preset.visionModel, textLimits.model, "Modelo de vision"),
+    ollamaStartCommand: boundedStringOrDefault(
+      input.ollamaStartCommand,
+      defaultOllamaStartCommand,
+      textLimits.localCommand,
+      "Comando de Ollama",
+    ),
+    whisperCommand: boundedStringOrDefault(
+      input.whisperCommand,
+      process.env.WHISPER_COMMAND || defaultWhisperCommand,
+      textLimits.localCommand,
+      "Comando de Whisper",
+    ),
+    whisperModel: boundedStringOrDefault(
+      input.whisperModel,
+      process.env.WHISPER_MODEL || defaultWhisperModel,
+      textLimits.model,
+      "Modelo de Whisper",
+    ),
+    transcriptionEnabled: booleanOrDefault(input.transcriptionEnabled, preset.transcriptionEnabled),
+    transcriptAnalysisEnabled: booleanOrDefault(input.transcriptAnalysisEnabled, preset.transcriptAnalysisEnabled),
+    videoAnalysisEnabled: booleanOrDefault(input.videoAnalysisEnabled, preset.videoAnalysisEnabled),
+    historyContextEnabled: booleanOrDefault(input.historyContextEnabled, preset.historyContextEnabled),
+    applicationContext: boundedStringOrDefault(
+      input.applicationContext,
+      preset.applicationContext,
+      textLimits.applicationContext,
+      "Contexto de aplicacion",
+    ),
     updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : undefined,
   };
 }

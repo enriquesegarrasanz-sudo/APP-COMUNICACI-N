@@ -1135,6 +1135,12 @@ select:focus {
   object-fit: contain;
 }
 
+.video-surface audio {
+  display: block;
+  width: calc(100% - (var(--camera-space-4) * 2));
+  margin: var(--camera-space-5) var(--camera-space-4);
+}
+
 .video-placeholder {
   display: grid;
   width: 100%;
