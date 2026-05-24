@@ -1,7 +1,21 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { defaultAiSettings, defaultDriveSettings, getAiSettingsPreset } from "@/lib/ai-defaults";
-import { uploadFileToDrive } from "@/lib/google-drive";
+import {
+  createDriveResumableUploadSession,
+  deleteDriveFile,
+  driveFolderMimeType,
+  driveJsonMimeType,
+  ensureDriveFolder,
+  findDriveChild,
+  getDriveFileMetadata,
+  listDriveChildren,
+  readDriveJsonFile,
+  readDriveJsonFileByName,
+  upsertDriveJsonFile,
+  uploadFileToDrive,
+} from "@/lib/google-drive";
+import { getGoogleDriveAuthStatus } from "@/lib/google-drive-auth";
 import { processUploadedMedia } from "@/lib/media-processing";
 import { PublicError } from "@/lib/security";
 import type {
@@ -10,6 +24,7 @@ import type {
   AppDatabase,
   DriveSettings,
   DriveSettingsStatus,
+  StorageDriverName,
   VideoEntry,
 } from "@/types/video";
 
@@ -54,8 +69,76 @@ const audioExtensions = new Set([".aac", ".m4a", ".mp3", ".ogg", ".wav"]);
 
 let databaseQueue = Promise.resolve();
 
+type DriveIndex = {
+  sessions: Array<{ id: string; numero: number; updatedAt: string }>;
+  updatedAt: string;
+};
+
+type DriveSettingsFile = {
+  aiSettings: AiSettings;
+  driveSettings: DriveSettings;
+  updatedAt: string;
+};
+
+type DriveStructure = {
+  appDbFolderId: string;
+  sessionsFolderId: string;
+  jobsFolderId: string;
+  pendingJobsFolderId: string;
+  doneJobsFolderId: string;
+};
+
+export type DriveWorkerJob = {
+  id: string;
+  jobFileId: string;
+  originalFileId?: string;
+  sessionFolderId?: string;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+  error?: string;
+};
+
+export type DriveWorkerJobStatus = "pending-processing" | "processing" | "done" | "error";
+
+export type PendingDriveUploadInput = {
+  fecha?: string;
+  titulo?: string;
+  tema?: string;
+  etiquetas?: string;
+  notasMeGusto?: string;
+  notasMejorar?: string;
+  originalFileName: string;
+  mimeType: string;
+  size: number;
+};
+
+export type FinalizeDriveUploadInput =
+  | {
+      id: string;
+      status: "uploaded";
+      fileId?: string;
+      fileName?: string;
+      mimeType?: string;
+      size?: number;
+      webViewLink?: string;
+    }
+  | {
+      id: string;
+      status: "error";
+      error: string;
+    };
+
 function defaultDatabase(): AppDatabase {
   return { videos: [], aiSettings: defaultAiSettings, driveSettings: defaultDriveSettings };
+}
+
+export function getStorageDriverName(): StorageDriverName {
+  return process.env.APP_STORAGE_DRIVER === "drive" ? "drive" : "local";
+}
+
+export function isDriveStorageDriver() {
+  return getStorageDriverName() === "drive";
 }
 
 function isStoreUnavailableError(error: unknown) {
@@ -147,17 +230,6 @@ function optionalText(value: unknown, maxLength: number, fieldName: string) {
   return text;
 }
 
-function normalizeEnvVar(value: unknown, fallback: string, fieldName: string, strict = false) {
-  const text = boundedStringOrDefault(value, fallback, textLimits.envVar, fieldName, strict);
-
-  if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(text)) {
-    validationError(`${fieldName} debe ser un nombre de variable de entorno valido.`, strict);
-    return fallback;
-  }
-
-  return text;
-}
-
 function normalizeAiSettings(value: unknown): AiSettings {
   const input = value && typeof value === "object" ? (value as Partial<AiSettings>) : {};
   const preset = getAiSettingsPreset(input.providerKind ?? defaultAiSettings.providerKind, input.analysisModel);
@@ -178,18 +250,6 @@ function normalizeDriveSettings(value: unknown, strict = false): DriveSettings {
       defaultDriveSettings.folderId,
       textLimits.driveFolderId,
       "ID de carpeta Drive",
-      strict,
-    ),
-    serviceAccountEmailEnvVar: normalizeEnvVar(
-      input.serviceAccountEmailEnvVar,
-      defaultDriveSettings.serviceAccountEmailEnvVar,
-      "Variable del email de service account",
-      strict,
-    ),
-    serviceAccountPrivateKeyEnvVar: normalizeEnvVar(
-      input.serviceAccountPrivateKeyEnvVar,
-      defaultDriveSettings.serviceAccountPrivateKeyEnvVar,
-      "Variable de private key de service account",
       strict,
     ),
     compressionCrf: numberInRange(input.compressionCrf, defaultDriveSettings.compressionCrf, 18, 35),
@@ -298,6 +358,349 @@ function normalizePatchTags(value: unknown) {
     .slice(0, 8);
 }
 
+function driveRootFolderId(settings: DriveSettings) {
+  return (
+    process.env.APP_DRIVE_ROOT_FOLDER_ID ||
+    process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID ||
+    settings.folderId
+  ).trim();
+}
+
+async function getDriveBootstrapSettings() {
+  const localDatabase = await readDatabase();
+  const folderId = driveRootFolderId(localDatabase.driveSettings || defaultDriveSettings);
+
+  if (!folderId) {
+    throw new PublicError("Falta APP_DRIVE_ROOT_FOLDER_ID o el ID de carpeta Drive.");
+  }
+
+  return normalizeDriveSettings({
+    ...defaultDriveSettings,
+    ...localDatabase.driveSettings,
+    enabled: true,
+    folderId,
+  });
+}
+
+async function ensureDriveStructure(settings?: DriveSettings): Promise<DriveStructure> {
+  const bootstrap = settings ?? (await getDriveBootstrapSettings());
+  const rootFolderId = driveRootFolderId(bootstrap);
+
+  if (!rootFolderId) {
+    throw new PublicError("Falta el ID de carpeta raiz de Google Drive.");
+  }
+
+  const appDbFolder = await ensureDriveFolder({ parentId: rootFolderId, name: "app-db" });
+  const sessionsFolder = await ensureDriveFolder({ parentId: appDbFolder.fileId, name: "sessions" });
+  const jobsFolder = await ensureDriveFolder({ parentId: appDbFolder.fileId, name: "jobs" });
+  const pendingJobsFolder = await ensureDriveFolder({ parentId: jobsFolder.fileId, name: "pending" });
+  const doneJobsFolder = await ensureDriveFolder({ parentId: jobsFolder.fileId, name: "done" });
+
+  return {
+    appDbFolderId: appDbFolder.fileId,
+    sessionsFolderId: sessionsFolder.fileId,
+    jobsFolderId: jobsFolder.fileId,
+    pendingJobsFolderId: pendingJobsFolder.fileId,
+    doneJobsFolderId: doneJobsFolder.fileId,
+  };
+}
+
+function defaultDriveIndex(): DriveIndex {
+  return { sessions: [], updatedAt: new Date().toISOString() };
+}
+
+function normalizeDriveIndex(value: unknown): DriveIndex {
+  const input = value && typeof value === "object" ? (value as Partial<DriveIndex>) : {};
+  const sessions = Array.isArray(input.sessions)
+    ? input.sessions
+        .map((session) => ({
+          id: typeof session.id === "string" ? session.id : "",
+          numero: numberOrDefault(session.numero, 0),
+          updatedAt: typeof session.updatedAt === "string" ? session.updatedAt : "",
+        }))
+        .filter((session) => session.id && session.numero > 0)
+    : [];
+
+  return {
+    sessions,
+    updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : new Date().toISOString(),
+  };
+}
+
+async function readDriveIndex(structure: DriveStructure) {
+  const stored = await readDriveJsonFileByName<DriveIndex>({
+    parentId: structure.appDbFolderId,
+    name: "index.json",
+  });
+
+  if (!stored) {
+    const index = defaultDriveIndex();
+    await upsertDriveJsonFile({ parentId: structure.appDbFolderId, name: "index.json", value: index });
+    return index;
+  }
+
+  return normalizeDriveIndex(stored.value);
+}
+
+async function writeDriveIndex(structure: DriveStructure, index: DriveIndex) {
+  await upsertDriveJsonFile({
+    parentId: structure.appDbFolderId,
+    name: "index.json",
+    value: { ...index, updatedAt: new Date().toISOString() },
+  });
+}
+
+function defaultDriveSettingsFile(settings: DriveSettings): DriveSettingsFile {
+  return {
+    aiSettings: defaultAiSettings,
+    driveSettings: settings,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function readDriveSettingsFile() {
+  const bootstrap = await getDriveBootstrapSettings();
+  const structure = await ensureDriveStructure(bootstrap);
+  const stored = await readDriveJsonFileByName<Partial<DriveSettingsFile>>({
+    parentId: structure.appDbFolderId,
+    name: "settings.json",
+  });
+
+  if (!stored) {
+    const settingsFile = defaultDriveSettingsFile(bootstrap);
+    await upsertDriveJsonFile({ parentId: structure.appDbFolderId, name: "settings.json", value: settingsFile });
+    return { settingsFile, structure };
+  }
+
+  const settingsFile: DriveSettingsFile = {
+    aiSettings: normalizeAiSettings(stored.value.aiSettings),
+    driveSettings: normalizeDriveSettings({
+      ...bootstrap,
+      ...stored.value.driveSettings,
+      enabled: true,
+      folderId: driveRootFolderId((stored.value.driveSettings as DriveSettings | undefined) ?? bootstrap),
+    }),
+    updatedAt: typeof stored.value.updatedAt === "string" ? stored.value.updatedAt : new Date().toISOString(),
+  };
+
+  return { settingsFile, structure };
+}
+
+async function writeDriveSettingsFile(patch: {
+  aiSettings?: Partial<AiSettings>;
+  driveSettings?: Partial<DriveSettings>;
+}) {
+  const { settingsFile, structure } = await readDriveSettingsFile();
+  const next: DriveSettingsFile = {
+    aiSettings: patch.aiSettings ? normalizeAiSettings(patch.aiSettings) : settingsFile.aiSettings,
+    driveSettings: patch.driveSettings
+      ? normalizeDriveSettings({ ...settingsFile.driveSettings, ...patch.driveSettings, enabled: true }, true)
+      : settingsFile.driveSettings,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await upsertDriveJsonFile({ parentId: structure.appDbFolderId, name: "settings.json", value: next });
+  return next;
+}
+
+async function ensureDriveSessionFolder(structure: DriveStructure, id: string) {
+  return ensureDriveFolder({ parentId: structure.sessionsFolderId, name: id });
+}
+
+async function readDriveSessionById(id: string): Promise<VideoEntry | null> {
+  const { structure } = await readDriveSettingsFile();
+  const folder = await findDriveChild({
+    parentId: structure.sessionsFolderId,
+    name: id,
+    mimeType: driveFolderMimeType,
+  });
+
+  if (!folder) {
+    return null;
+  }
+
+  const stored = await readDriveJsonFileByName<VideoEntry>({ parentId: folder.fileId, name: "session.json" });
+
+  if (!stored) {
+    return null;
+  }
+
+  return {
+    ...stored.value,
+    driveFolderId: stored.value.driveFolderId ?? folder.fileId,
+    driveSessionFolderId: folder.fileId,
+    driveSessionJsonFileId: stored.file.fileId,
+    storageDriver: "drive" as const,
+  };
+}
+
+function normalizeDriveWorkerJob(file: { fileId: string }, value: unknown): DriveWorkerJob | null {
+  const input = value && typeof value === "object" ? (value as Partial<DriveWorkerJob>) : {};
+  const id = typeof input.id === "string" && input.id.trim() ? input.id.trim() : "";
+
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    jobFileId: file.fileId,
+    originalFileId: typeof input.originalFileId === "string" ? input.originalFileId : undefined,
+    sessionFolderId: typeof input.sessionFolderId === "string" ? input.sessionFolderId : undefined,
+    status: typeof input.status === "string" ? input.status : "pending-processing",
+    createdAt: typeof input.createdAt === "string" ? input.createdAt : undefined,
+    updatedAt: typeof input.updatedAt === "string" ? input.updatedAt : undefined,
+    error: typeof input.error === "string" ? input.error : undefined,
+  };
+}
+
+export async function listPendingDriveWorkerJobs() {
+  if (!isDriveStorageDriver()) {
+    throw new PublicError("El worker local necesita APP_STORAGE_DRIVER=drive.");
+  }
+
+  const { structure } = await readDriveSettingsFile();
+  const files = await listDriveChildren({
+    parentId: structure.pendingJobsFolderId,
+    mimeType: driveJsonMimeType,
+  });
+  const jobs = await Promise.all(
+    files.map(async (file) => {
+      try {
+        const value = await readDriveJsonFile<unknown>({ fileId: file.fileId });
+        return normalizeDriveWorkerJob(file, value);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return jobs.filter((job): job is DriveWorkerJob => Boolean(job));
+}
+
+export async function writeDriveWorkerJobStatus({
+  error,
+  id,
+  originalFileId,
+  sessionFolderId,
+  status,
+}: {
+  error?: string;
+  id: string;
+  originalFileId?: string;
+  sessionFolderId?: string;
+  status: DriveWorkerJobStatus;
+}) {
+  if (!isDriveStorageDriver()) {
+    throw new PublicError("El worker local necesita APP_STORAGE_DRIVER=drive.");
+  }
+
+  const { structure } = await readDriveSettingsFile();
+  const now = new Date().toISOString();
+  const value = {
+    id,
+    originalFileId,
+    sessionFolderId,
+    status,
+    error,
+    updatedAt: now,
+  };
+
+  if (status === "done") {
+    await upsertDriveJsonFile({
+      parentId: structure.doneJobsFolderId,
+      name: `${id}.json`,
+      value,
+    });
+    const pending = await findDriveChild({
+      parentId: structure.pendingJobsFolderId,
+      name: `${id}.json`,
+      mimeType: driveJsonMimeType,
+    });
+
+    if (pending) {
+      await deleteDriveFile(pending.fileId);
+    }
+
+    return;
+  }
+
+  await upsertDriveJsonFile({
+    parentId: structure.pendingJobsFolderId,
+    name: `${id}.json`,
+    value,
+  });
+}
+
+export async function updateDriveWorkerSessionEntry(id: string, patch: Partial<VideoEntry>) {
+  if (!isDriveStorageDriver()) {
+    throw new PublicError("El worker local necesita APP_STORAGE_DRIVER=drive.");
+  }
+
+  const { structure } = await readDriveSettingsFile();
+  const previous = await readDriveSessionById(id);
+
+  if (!previous) {
+    return null;
+  }
+
+  const next: VideoEntry = {
+    ...previous,
+    ...patch,
+    id: previous.id,
+    numero: previous.numero,
+    storageDriver: "drive",
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeDriveSession(next, structure, next.driveFolderId);
+  await upsertDriveIndexEntry(next, structure);
+  return next;
+}
+
+async function writeDriveSession(entry: VideoEntry, structure: DriveStructure, sessionFolderId?: string) {
+  const folderId = sessionFolderId ?? entry.driveFolderId;
+
+  if (!folderId) {
+    throw new PublicError("Falta la carpeta Drive de la sesion.");
+  }
+
+  await upsertDriveJsonFile({
+    parentId: folderId,
+    name: "session.json",
+    value: {
+      ...entry,
+      driveFolderId: folderId,
+      driveSessionFolderId: folderId,
+      storageDriver: "drive",
+    },
+  });
+}
+
+async function upsertDriveIndexEntry(entry: VideoEntry, structure: DriveStructure) {
+  const index = await readDriveIndex(structure);
+  const nextSessions = index.sessions.filter((session) => session.id !== entry.id);
+  nextSessions.push({ id: entry.id, numero: entry.numero, updatedAt: entry.updatedAt });
+  nextSessions.sort((a, b) => a.numero - b.numero);
+  await writeDriveIndex(structure, { sessions: nextSessions, updatedAt: new Date().toISOString() });
+}
+
+async function listDriveVideoEntries(): Promise<VideoEntry[]> {
+  const { structure } = await readDriveSettingsFile();
+  const index = await readDriveIndex(structure);
+  const entries = await Promise.all(index.sessions.map((session) => readDriveSessionById(session.id)));
+
+  return entries
+    .filter((entry): entry is VideoEntry => Boolean(entry))
+    .toSorted((a, b) => b.numero - a.numero);
+}
+
+function originalDriveFileName(originalFileName: string, mimeType: string) {
+  const fallbackExtension = mimeType.startsWith("audio/") ? ".m4a" : ".mp4";
+  const extension = path.extname(originalFileName).toLowerCase() || fallbackExtension;
+  return `original${allowedMediaExtensions.has(extension) ? extension : fallbackExtension}`;
+}
+
 function maxUploadSizeBytes() {
   const configuredMb = Number(process.env.APP_MAX_UPLOAD_MB);
   const safeMb = Number.isFinite(configuredMb) && configuredMb > 0 ? Math.min(configuredMb, 5120) : 1024;
@@ -309,8 +712,24 @@ function uploadLimitMessage(maxBytes: number) {
 }
 
 function assertAllowedMedia(file: File, originalFileName: string) {
+  assertAllowedMediaMetadata({
+    mimeType: file.type,
+    originalFileName,
+    size: file.size,
+  });
+}
+
+function assertAllowedMediaMetadata({
+  mimeType,
+  originalFileName,
+  size,
+}: {
+  mimeType: string;
+  originalFileName: string;
+  size: number;
+}) {
   const extension = path.extname(originalFileName).toLowerCase();
-  const mimeAllowed = file.type.startsWith("video/") || file.type.startsWith("audio/");
+  const mimeAllowed = mimeType.startsWith("video/") || mimeType.startsWith("audio/");
   const extensionAllowed = !extension || allowedMediaExtensions.has(extension);
 
   if (!mimeAllowed && !extensionAllowed) {
@@ -323,7 +742,7 @@ function assertAllowedMedia(file: File, originalFileName: string) {
 
   const maxBytes = maxUploadSizeBytes();
 
-  if (file.size > maxBytes) {
+  if (size > maxBytes) {
     throw new PublicError(`El archivo supera el limite de ${uploadLimitMessage(maxBytes)}.`);
   }
 }
@@ -379,11 +798,20 @@ export function sanitizeVideoPatch(body: Partial<VideoEntry>): Partial<VideoEntr
 }
 
 export async function listVideoEntries() {
+  if (isDriveStorageDriver()) {
+    return listDriveVideoEntries();
+  }
+
   const database = await readDatabase();
   return database.videos.toSorted((a, b) => b.numero - a.numero);
 }
 
 export async function getAiSettings() {
+  if (isDriveStorageDriver()) {
+    const { settingsFile } = await readDriveSettingsFile();
+    return settingsFile.aiSettings;
+  }
+
   const database = await readDatabase();
   return database.aiSettings;
 }
@@ -398,6 +826,17 @@ export async function getAiSettingsStatus(): Promise<AiSettingsStatus> {
 }
 
 export async function updateAiSettings(patch: Partial<AiSettings>) {
+  if (isDriveStorageDriver()) {
+    const { settingsFile } = await readDriveSettingsFile();
+    return writeDriveSettingsFile({
+      aiSettings: {
+        ...settingsFile.aiSettings,
+        ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)),
+        updatedAt: new Date().toISOString(),
+      },
+    }).then((next) => next.aiSettings);
+  }
+
   return withDatabaseLock(async () => {
     const database = await readDatabase();
     const definedPatch = Object.fromEntries(
@@ -416,27 +855,34 @@ export async function updateAiSettings(patch: Partial<AiSettings>) {
 }
 
 export async function getDriveSettings() {
+  if (isDriveStorageDriver()) {
+    const { settingsFile } = await readDriveSettingsFile();
+    return settingsFile.driveSettings;
+  }
+
   const database = await readDatabase();
   return database.driveSettings;
 }
 
 export async function getDriveSettingsStatus(): Promise<DriveSettingsStatus> {
   const settings = await getDriveSettings();
-  const credentialsConfigured = Boolean(
-    settings.serviceAccountEmailEnvVar &&
-      process.env[settings.serviceAccountEmailEnvVar] &&
-      settings.serviceAccountPrivateKeyEnvVar &&
-      process.env[settings.serviceAccountPrivateKeyEnvVar],
-  );
+  const authStatus = await getGoogleDriveAuthStatus();
 
   return {
     ...settings,
-    credentialsConfigured,
-    ready: settings.enabled && credentialsConfigured && settings.folderId.trim().length > 0,
+    oauthConnected: authStatus.connected,
+    authMode: authStatus.mode,
+    writable: authStatus.writable,
+    ready: settings.enabled && authStatus.writable && settings.folderId.trim().length > 0,
   };
 }
 
 export async function updateDriveSettings(patch: Partial<DriveSettings>) {
+  if (isDriveStorageDriver()) {
+    const next = await writeDriveSettingsFile({ driveSettings: patch });
+    return next.driveSettings;
+  }
+
   return withDatabaseLock(async () => {
     const database = await readDatabase();
     const definedPatch = Object.fromEntries(
@@ -458,6 +904,10 @@ export async function updateDriveSettings(patch: Partial<DriveSettings>) {
 }
 
 export async function getVideoEntry(id: string) {
+  if (isDriveStorageDriver()) {
+    return readDriveSessionById(id);
+  }
+
   const database = await readDatabase();
   return database.videos.find((video) => video.id === id) ?? null;
 }
@@ -471,6 +921,10 @@ export function getTranscriptionMediaAbsolutePath(entry: VideoEntry) {
 }
 
 export async function createVideoEntry(formData: FormData) {
+  if (isDriveStorageDriver()) {
+    throw new PublicError("En modo Drive, sube el archivo con la subida directa resumible.", 409);
+  }
+
   const file = formData.get("video");
 
   if (!(file instanceof File) || file.size === 0) {
@@ -582,7 +1036,198 @@ export async function createVideoEntry(formData: FormData) {
   });
 }
 
-export async function updateVideoEntry(id: string, patch: Partial<VideoEntry>) {
+export async function createPendingDriveVideoEntry(input: PendingDriveUploadInput) {
+  if (!isDriveStorageDriver()) {
+    throw new PublicError("El storage local usa la subida clasica.", 409);
+  }
+
+  const nextFallbackName = "video";
+  const rawFileName = String(input.originalFileName || nextFallbackName).trim();
+  const originalFileName = requiredText(rawFileName, nextFallbackName, textLimits.fileName, "Nombre del archivo");
+  const mimeType = input.mimeType || (path.extname(originalFileName).toLowerCase() === ".mp3" ? "audio/mpeg" : "video/mp4");
+  const size = Number.isFinite(input.size) ? input.size : 0;
+
+  if (size <= 0) {
+    throw new PublicError("El archivo esta vacio.");
+  }
+
+  assertAllowedMediaMetadata({ mimeType, originalFileName, size });
+
+  return withDatabaseLock(async () => {
+    const { structure } = await readDriveSettingsFile();
+    const videos = await listDriveVideoEntries();
+    const nextNumber = videos.reduce((max, video) => Math.max(max, video.numero), 0) + 1;
+    const id = crypto.randomUUID();
+    const sessionFolder = await ensureDriveSessionFolder(structure, id);
+    const driveFileName = originalDriveFileName(originalFileName, mimeType);
+    const uploadUrl = await createDriveResumableUploadSession({
+      fileName: driveFileName,
+      mimeType,
+      parentId: sessionFolder.fileId,
+      size,
+    });
+    const now = new Date().toISOString();
+    const entry: VideoEntry = {
+      id,
+      numero: nextNumber,
+      titulo: requiredText(input.titulo, `Video ${nextNumber}`, textLimits.title, "Titulo"),
+      tema: requiredText(input.tema, "Sin tema", textLimits.topic, "Tema"),
+      fecha: normalizeDate(input.fecha ?? ""),
+      etiquetas: parseTags(input.etiquetas ?? ""),
+      videoUrl: "",
+      originalFileName,
+      storedFileName: driveFileName,
+      sourceFileName: driveFileName,
+      mimeType,
+      size,
+      processingStatus: "pending",
+      driveStatus: "uploading",
+      driveFolderId: sessionFolder.fileId,
+      driveSessionFolderId: sessionFolder.fileId,
+      driveFileName,
+      storageDriver: "drive",
+      workerStatus: "pending",
+      workerUpdatedAt: now,
+      notasMeGusto: optionalText(input.notasMeGusto, textLimits.notes, "Notas de fortalezas"),
+      notasMejorar: optionalText(input.notasMejorar, textLimits.notes, "Notas de mejora"),
+      transcript: "",
+      transcriptStatus: "idle",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await writeDriveSession(entry, structure, sessionFolder.fileId);
+    await upsertDriveIndexEntry(entry, structure);
+    await upsertDriveJsonFile({
+      parentId: structure.pendingJobsFolderId,
+      name: `${id}.json`,
+      value: {
+        id,
+        sessionFolderId: sessionFolder.fileId,
+        status: "pending-upload",
+        createdAt: now,
+      },
+    });
+
+    return { entry, uploadUrl, uploadFileName: driveFileName };
+  });
+}
+
+export async function finalizeDriveUpload(input: FinalizeDriveUploadInput) {
+  if (!isDriveStorageDriver()) {
+    throw new PublicError("La finalizacion directa solo aplica al storage Drive.", 409);
+  }
+
+  return withDatabaseLock(async () => {
+    const { structure } = await readDriveSettingsFile();
+    const entry = await readDriveSessionById(input.id);
+
+    if (!entry) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    let next: VideoEntry;
+
+    if (input.status === "error") {
+      next = {
+        ...entry,
+        driveStatus: "error",
+        driveError: optionalText(input.error, 1000, "Error de subida") || "La subida directa a Drive fallo.",
+        workerStatus: "error",
+        workerUpdatedAt: now,
+        updatedAt: now,
+      };
+    } else {
+      const metadata = input.fileId
+        ? await getDriveFileMetadata(input.fileId)
+        : entry.driveFolderId && entry.driveFileName
+          ? await findDriveChild({ parentId: entry.driveFolderId, name: entry.driveFileName })
+          : null;
+
+      if (!metadata) {
+        throw new PublicError("La subida termino, pero no se encontro el archivo en la carpeta de Drive.");
+      }
+
+      next = {
+        ...entry,
+        driveStatus: "uploaded",
+        driveError: undefined,
+        driveFileId: metadata.fileId,
+        driveOriginalFileId: metadata.fileId,
+        driveFileName: input.fileName || metadata.fileName || entry.driveFileName,
+        driveWebViewLink: input.webViewLink || metadata.webViewLink,
+        driveUploadedAt: now,
+        mimeType: input.mimeType || metadata.mimeType || entry.mimeType,
+        size: input.size || metadata.size || entry.size,
+        processingStatus: "pending",
+        workerStatus: "pending",
+        workerUpdatedAt: now,
+        updatedAt: now,
+      };
+    }
+
+    await writeDriveSession(next, structure, next.driveFolderId);
+    await upsertDriveIndexEntry(next, structure);
+    await upsertDriveJsonFile({
+      parentId: structure.pendingJobsFolderId,
+      name: `${next.id}.json`,
+      value: {
+        id: next.id,
+        originalFileId: next.driveOriginalFileId,
+        sessionFolderId: next.driveFolderId,
+        status: input.status === "uploaded" ? "pending-processing" : "upload-error",
+        updatedAt: now,
+      },
+    });
+
+    return next;
+  });
+}
+
+type UpdateVideoOptions = {
+  ifUnmodifiedSince?: string;
+};
+
+function assertNoVideoConflict(previous: VideoEntry, options?: UpdateVideoOptions) {
+  if (options?.ifUnmodifiedSince && previous.updatedAt !== options.ifUnmodifiedSince) {
+    throw new PublicError("La sesion cambio en otro dispositivo. Refresca antes de guardar de nuevo.", 409);
+  }
+}
+
+export async function updateVideoEntry(id: string, patch: Partial<VideoEntry>, options?: UpdateVideoOptions) {
+  if (isDriveStorageDriver()) {
+    return withDatabaseLock(async () => {
+      const { structure } = await readDriveSettingsFile();
+      const previous = await readDriveSessionById(id);
+
+      if (!previous) {
+        return null;
+      }
+
+      assertNoVideoConflict(previous, options);
+
+      const next: VideoEntry = {
+        ...previous,
+        ...patch,
+        id: previous.id,
+        numero: previous.numero,
+        videoUrl: previous.videoUrl,
+        originalFileName: previous.originalFileName,
+        storedFileName: previous.storedFileName,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (patch.transcript && patch.transcript.trim().length > 0 && !patch.transcriptStatus) {
+        next.transcriptStatus = "ready";
+      }
+
+      await writeDriveSession(next, structure, next.driveFolderId);
+      await upsertDriveIndexEntry(next, structure);
+      return next;
+    });
+  }
+
   return withDatabaseLock(async () => {
     const database = await readDatabase();
     const index = database.videos.findIndex((video) => video.id === id);
@@ -592,6 +1237,8 @@ export async function updateVideoEntry(id: string, patch: Partial<VideoEntry>) {
     }
 
     const previous = database.videos[index];
+    assertNoVideoConflict(previous, options);
+
     const next: VideoEntry = {
       ...previous,
       ...patch,
@@ -614,6 +1261,25 @@ export async function updateVideoEntry(id: string, patch: Partial<VideoEntry>) {
 }
 
 export async function deleteVideoEntry(id: string) {
+  if (isDriveStorageDriver()) {
+    return withDatabaseLock(async () => {
+      const { structure } = await readDriveSettingsFile();
+      const entry = await readDriveSessionById(id);
+
+      if (!entry) {
+        return false;
+      }
+
+      const index = await readDriveIndex(structure);
+      await writeDriveIndex(structure, {
+        sessions: index.sessions.filter((session) => session.id !== id),
+        updatedAt: new Date().toISOString(),
+      });
+
+      return true;
+    });
+  }
+
   return withDatabaseLock(async () => {
     const database = await readDatabase();
     const entry = database.videos.find((video) => video.id === id);

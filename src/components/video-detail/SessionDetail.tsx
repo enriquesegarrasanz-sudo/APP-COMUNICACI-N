@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   Brain,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { compareSessions } from "@/lib/insights";
+import { type AutosaveStatus, useAutosave } from "@/lib/use-autosave";
 import type { AiSettingsStatus, VideoEntry } from "@/types/video";
 
 type Props = {
@@ -65,6 +66,75 @@ function toDraft(video: VideoEntry | null): Draft {
   };
 }
 
+function draftsAreEqual(left: Draft, right: Draft) {
+  return (
+    left.titulo === right.titulo &&
+    left.tema === right.tema &&
+    left.fecha === right.fecha &&
+    left.etiquetas === right.etiquetas &&
+    left.notasMeGusto === right.notasMeGusto &&
+    left.notasMejorar === right.notasMejorar &&
+    left.transcript === right.transcript
+  );
+}
+
+function tagsFromDraft(value: string) {
+  return value
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function draftPatch(value: Draft, baseline: Draft): Partial<VideoEntry> {
+  const patch: Partial<VideoEntry> = {};
+
+  if (value.titulo !== baseline.titulo) {
+    patch.titulo = value.titulo;
+  }
+
+  if (value.tema !== baseline.tema) {
+    patch.tema = value.tema;
+  }
+
+  if (value.fecha !== baseline.fecha) {
+    patch.fecha = value.fecha;
+  }
+
+  if (value.etiquetas !== baseline.etiquetas) {
+    patch.etiquetas = tagsFromDraft(value.etiquetas);
+  }
+
+  if (value.notasMeGusto !== baseline.notasMeGusto) {
+    patch.notasMeGusto = value.notasMeGusto;
+  }
+
+  if (value.notasMejorar !== baseline.notasMejorar) {
+    patch.notasMejorar = value.notasMejorar;
+  }
+
+  if (value.transcript !== baseline.transcript) {
+    patch.transcript = value.transcript;
+  }
+
+  return patch;
+}
+
+function autosaveLabel(status: AutosaveStatus, dirty: boolean, error: string) {
+  if (status === "error") {
+    return error || "Error al guardar";
+  }
+
+  if (status === "saving" || status === "pending") {
+    return "Guardando...";
+  }
+
+  if (status === "saved") {
+    return "Guardado";
+  }
+
+  return dirty ? "Pendiente" : "Guardado";
+}
+
 function formatBytes(value?: number) {
   if (!value || value <= 0) {
     return "";
@@ -81,19 +151,20 @@ type HealthTone = "ready" | "pending" | "error" | "muted";
 
 function getSessionHealth(video: VideoEntry) {
   const mediaIsError = video.processingStatus === "error";
+  const mediaIsPending = video.processingStatus === "pending";
   const transcriptReady = video.transcriptStatus === "ready";
 
   return [
     {
       label: "Media",
-      status: mediaIsError ? "Error" : "Listo",
-      detail: mediaIsError ? "Procesado fallo" : formatBytes(video.compressedSize || video.size),
-      tone: mediaIsError ? "error" : "ready",
+      status: mediaIsError ? "Error" : mediaIsPending ? "Pendiente" : "Listo",
+      detail: mediaIsError ? "Procesado fallo" : mediaIsPending ? "Worker local" : formatBytes(video.compressedSize || video.size),
+      tone: mediaIsError ? "error" : mediaIsPending ? "pending" : "ready",
     },
     {
       label: "Audio",
       status: mediaIsError ? "Error" : video.audioFileName ? "Listo" : "Pendiente",
-      detail: video.audioFileName ? formatBytes(video.audioSize) : "Sin archivo ligero",
+      detail: video.audioFileName ? formatBytes(video.audioSize) : mediaIsPending ? "Esperando worker" : "Sin archivo ligero",
       tone: mediaIsError ? "error" : video.audioFileName ? "ready" : "pending",
     },
     {
@@ -125,13 +196,24 @@ function getSessionHealth(video: VideoEntry) {
       status:
         video.driveStatus === "uploaded"
           ? "Subido"
+          : video.driveStatus === "uploading"
+            ? "Subiendo"
+            : video.driveStatus === "pending"
+              ? "Pendiente"
           : video.driveStatus === "error"
             ? "Error"
             : video.driveStatus === "disabled"
               ? "Pausado"
               : "Omitido",
       detail: video.driveFileName ?? "Local",
-      tone: video.driveStatus === "uploaded" ? "ready" : video.driveStatus === "error" ? "error" : "muted",
+      tone:
+        video.driveStatus === "uploaded"
+          ? "ready"
+          : video.driveStatus === "error"
+            ? "error"
+            : video.driveStatus === "uploading" || video.driveStatus === "pending"
+              ? "pending"
+              : "muted",
     },
   ] satisfies Array<{ label: string; status: string; detail: string; tone: HealthTone }>;
 }
@@ -162,10 +244,83 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
   const [useAi, setUseAi] = useState(
     () => aiSettings.transcriptAnalysisEnabled && (aiSettings.authMode === "none" || aiSettings.apiKeyConfigured),
   );
-  const [saving, setSaving] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [message, setMessage] = useState("");
+  const savedDraftRef = useRef<Draft>(toDraft(video));
+  const savedUpdatedAtRef = useRef(video?.updatedAt ?? "");
+  const seenVideoIdRef = useRef(video?.id ?? "");
+
+  const saveDraft = useCallback(
+    async (value: Draft) => {
+      if (!video) {
+        throw new Error("No hay sesion seleccionada.");
+      }
+
+      const patch = draftPatch(value, savedDraftRef.current);
+
+      if (Object.keys(patch).length === 0) {
+        return video;
+      }
+
+      const response = await fetch(`/api/videos/${video.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...patch,
+          ifUnmodifiedSince: savedUpdatedAtRef.current,
+        }),
+      });
+      const payload = (await response.json()) as { entry?: VideoEntry; error?: string };
+
+      if (!response.ok || !payload.entry) {
+        throw new Error(payload.error || "No se pudo guardar.");
+      }
+
+      return payload.entry;
+    },
+    [video],
+  );
+
+  const applySavedEntry = useCallback(
+    (entry: VideoEntry) => {
+      savedDraftRef.current = toDraft(entry);
+      savedUpdatedAtRef.current = entry.updatedAt;
+      onEntryChange(entry);
+    },
+    [onEntryChange],
+  );
+
+  const autosave = useAutosave<Draft, VideoEntry>({
+    debounceMs: 900,
+    enabled: Boolean(video),
+    isDirty: (value) => !draftsAreEqual(value, savedDraftRef.current),
+    onSave: saveDraft,
+    onSaved: applySavedEntry,
+    resetKey: video?.id ?? "empty-session",
+    value: draft,
+  });
+
+  useEffect(() => {
+    if (!video) {
+      savedDraftRef.current = emptyDraft;
+      savedUpdatedAtRef.current = "";
+      seenVideoIdRef.current = "";
+      return;
+    }
+
+    const nextDraft = toDraft(video);
+    const selectedAnotherSession = seenVideoIdRef.current !== video.id;
+    const hasLocalDraftChanges = !draftsAreEqual(draft, savedDraftRef.current);
+
+    if ((selectedAnotherSession || !hasLocalDraftChanges) && !draftsAreEqual(draft, nextDraft)) {
+      setDraft(nextDraft);
+    }
+
+    savedDraftRef.current = nextDraft;
+    savedUpdatedAtRef.current = video.updatedAt;
+    seenVideoIdRef.current = video.id;
+  }, [draft, video]);
 
   if (!video) {
     return (
@@ -192,37 +347,6 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  async function patchVideo() {
-    setSaving(true);
-    setMessage("");
-
-    try {
-      const response = await fetch(`/api/videos/${currentVideo.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...draft,
-          etiquetas: draft.etiquetas
-            .split(",")
-            .map((tag) => tag.trim())
-            .filter(Boolean),
-        }),
-      });
-      const payload = (await response.json()) as { entry?: VideoEntry; error?: string };
-
-      if (!response.ok || !payload.entry) {
-        throw new Error(payload.error || "No se pudo guardar.");
-      }
-
-      onEntryChange(payload.entry);
-      setMessage("Guardado.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo guardar.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function transcribe() {
     setTranscribing(true);
     setMessage("");
@@ -240,7 +364,10 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
       }
 
       onEntryChange(payload.entry);
-      setDraft(toDraft(payload.entry));
+      const nextDraft = toDraft(payload.entry);
+      savedDraftRef.current = nextDraft;
+      savedUpdatedAtRef.current = payload.entry.updatedAt;
+      setDraft(nextDraft);
       setMessage("Transcripcion y analisis base listos.");
     } catch (error) {
       if (error instanceof Error) {
@@ -258,8 +385,8 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
     setMessage("");
 
     try {
-      if (draft.transcript !== currentVideo.transcript) {
-        await patchVideo();
+      if (autosave.dirty) {
+        await autosave.saveNow();
       }
 
       const response = await fetch("/api/analyze", {
@@ -274,6 +401,8 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
       }
 
       onEntryChange(payload.entry);
+      savedDraftRef.current = toDraft(payload.entry);
+      savedUpdatedAtRef.current = payload.entry.updatedAt;
       setMessage("Analisis actualizado.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo analizar.");
@@ -293,6 +422,9 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
   const analysis = currentVideo.analysis;
   const healthItems = getSessionHealth(currentVideo);
   const comparison = compareSessions(currentVideo, previousVideo);
+  const autosaveBusy = autosave.status === "pending" || autosave.status === "saving";
+  const autosaveText = autosaveLabel(autosave.status, autosave.dirty, autosave.error);
+  const autosaveClassName = autosave.status === "error" ? "autosave-chip is-error" : "autosave-chip";
 
   return (
     <section className="session-detail">
@@ -372,16 +504,46 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
 
       <div className="detail-grid">
         <div className="video-surface">
-          <video controls src={currentVideo.videoUrl} />
+          {currentVideo.videoUrl ? (
+            <video controls src={currentVideo.videoUrl} />
+          ) : (
+            <div className="video-placeholder">
+              <Cloud aria-hidden="true" size={28} />
+              <strong>
+                {currentVideo.processingStatus === "ready" ? "Resultado guardado en Drive" : "Original guardado en Drive"}
+              </strong>
+              <span>
+                {currentVideo.processingStatus === "ready"
+                  ? "Abre el MP4 comprimido desde el enlace Drive."
+                  : "Pendiente de compresion por el worker local."}
+              </span>
+            </div>
+          )}
           <div className="media-status-stack">
-            <span className={currentVideo.processingStatus === "error" ? "media-chip is-error" : "media-chip is-ready"}>
+            <span
+              className={
+                currentVideo.processingStatus === "error"
+                  ? "media-chip is-error"
+                  : currentVideo.processingStatus === "pending"
+                    ? "media-chip"
+                    : "media-chip is-ready"
+              }
+            >
               <FileAudio2 aria-hidden="true" size={15} />
-              {currentVideo.audioFileName ? `Audio ${formatBytes(currentVideo.audioSize)}` : "Audio pendiente"}
+              {currentVideo.audioFileName
+                ? `Audio ${formatBytes(currentVideo.audioSize)}`
+                : currentVideo.processingStatus === "pending"
+                  ? "Worker pendiente"
+                  : "Audio pendiente"}
             </span>
             <span className={currentVideo.driveStatus === "error" ? "media-chip is-error" : "media-chip"}>
               <Cloud aria-hidden="true" size={15} />
               {currentVideo.driveStatus === "uploaded"
                 ? "Drive subido"
+                : currentVideo.driveStatus === "uploading"
+                  ? "Subiendo a Drive"
+                  : currentVideo.driveStatus === "pending"
+                    ? "Drive pendiente"
                 : currentVideo.driveStatus === "disabled"
                   ? "Drive pausado"
                   : currentVideo.driveStatus === "error"
@@ -402,9 +564,15 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
         </div>
 
         <div className="edit-surface">
-          <div className="surface-title">
-            <PenLine aria-hidden="true" size={18} />
-            <h2>Ficha</h2>
+          <div className="surface-toolbar">
+            <div className="surface-title">
+              <PenLine aria-hidden="true" size={18} />
+              <h2>Ficha</h2>
+            </div>
+            <span className={autosaveClassName}>
+              {autosaveBusy ? <LoaderCircle aria-hidden="true" size={15} /> : null}
+              {autosaveText}
+            </span>
           </div>
 
           <label>
@@ -442,9 +610,14 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
           </label>
 
           <div className="button-row">
-            <button className="secondary-action" disabled={saving} onClick={patchVideo} type="button">
-              {saving ? <LoaderCircle aria-hidden="true" size={17} /> : <Save aria-hidden="true" size={17} />}
-              Guardar
+            <button
+              className="secondary-action"
+              disabled={!autosave.dirty || autosaveBusy}
+              onClick={() => void autosave.saveNow().catch(() => undefined)}
+              type="button"
+            >
+              {autosaveBusy ? <LoaderCircle aria-hidden="true" size={17} /> : <Save aria-hidden="true" size={17} />}
+              Guardar ahora
             </button>
             <button className="danger-action" onClick={deleteEntry} type="button">
               <Trash2 aria-hidden="true" size={17} />
@@ -461,6 +634,10 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
             <h2>Transcripcion</h2>
           </div>
           <div className="toolbar-controls">
+            <span className={autosaveClassName}>
+              {autosaveBusy ? <LoaderCircle aria-hidden="true" size={15} /> : null}
+              {autosaveText}
+            </span>
             <span className="local-transcription-chip">Whisper local</span>
             <button className="secondary-action" disabled={transcribeDisabled} onClick={transcribe} type="button">
               {transcribing ? (

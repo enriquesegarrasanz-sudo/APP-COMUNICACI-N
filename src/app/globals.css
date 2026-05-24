@@ -121,6 +121,18 @@ svg {
   gap: var(--camera-space-4);
 }
 
+.topline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--camera-space-2);
+}
+
+.topline-actions > span {
+  color: var(--camera-ink-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .topline p,
 .detail-header p,
 .section-heading p,
@@ -224,6 +236,7 @@ svg {
 .session-list,
 .session-detail,
 .global-report,
+.personal-access-panel,
 .drive-settings-panel,
 .ai-settings-panel {
   border: 1px solid var(--camera-line);
@@ -234,12 +247,14 @@ svg {
 
 .new-session-form,
 .session-list,
+.personal-access-panel,
 .drive-settings-panel,
 .ai-settings-panel {
   padding: var(--camera-space-4);
 }
 
 .new-session-form,
+.personal-access-panel,
 .drive-settings-panel,
 .ai-settings-panel {
   display: flex;
@@ -257,6 +272,38 @@ svg {
   display: flex;
   align-items: center;
   gap: var(--camera-space-2);
+}
+
+.personal-access-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 0.9fr);
+  align-items: center;
+  border-color: rgba(181, 124, 0, 0.24);
+  background: rgba(255, 251, 235, 0.72);
+}
+
+.personal-access-panel.is-granted {
+  grid-template-columns: minmax(220px, 1fr) auto;
+  border-color: rgba(15, 138, 101, 0.2);
+  background: rgba(235, 253, 246, 0.72);
+}
+
+.personal-access-panel svg {
+  color: var(--camera-blue);
+}
+
+.personal-access-panel .panel-title small {
+  display: block;
+  color: var(--camera-ink-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.personal-access-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: var(--camera-space-2);
+  align-items: end;
 }
 
 .form-heading h2,
@@ -363,6 +410,22 @@ select:focus {
   border: 1px solid var(--camera-line);
   background: var(--camera-paper-strong);
   color: var(--camera-blue-deep);
+}
+
+.icon-action {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--camera-line);
+  border-radius: var(--camera-radius-sm);
+  background: var(--camera-paper-strong);
+  color: var(--camera-blue-deep);
+}
+
+.icon-action.is-busy svg,
+.autosave-chip svg {
+  animation: spin 1s linear infinite;
 }
 
 .danger-action {
@@ -1072,6 +1135,32 @@ select:focus {
   object-fit: contain;
 }
 
+.video-placeholder {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  max-height: 620px;
+  place-items: center;
+  align-content: center;
+  gap: var(--camera-space-2);
+  background:
+    linear-gradient(135deg, rgba(31, 111, 235, 0.16), rgba(14, 159, 189, 0.12)),
+    #f7fbff;
+  color: var(--camera-blue-deep);
+  padding: var(--camera-space-5);
+  text-align: center;
+}
+
+.video-placeholder strong,
+.video-placeholder span {
+  overflow-wrap: anywhere;
+}
+
+.video-placeholder span {
+  color: var(--camera-ink-muted);
+  font-weight: 800;
+}
+
 .media-status-stack {
   display: flex;
   flex-wrap: wrap;
@@ -1130,11 +1219,34 @@ select:focus {
 
 .transcript-toolbar,
 .analysis-toolbar,
+.surface-toolbar,
 .section-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--camera-space-3);
+}
+
+.autosave-chip {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: var(--camera-space-1);
+  border: 1px solid rgba(15, 138, 101, 0.18);
+  border-radius: 999px;
+  background: rgba(15, 138, 101, 0.08);
+  color: var(--camera-green);
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.autosave-chip.is-error {
+  border-color: rgba(215, 95, 69, 0.24);
+  background: rgba(215, 95, 69, 0.08);
+  color: var(--camera-coral);
+  white-space: normal;
 }
 
 .transcript-area {
@@ -1677,6 +1789,9 @@ select:focus {
 
   .control-grid,
   .ai-provider-grid,
+  .personal-access-form,
+  .personal-access-panel,
+  .personal-access-panel.is-granted,
   .session-card-grid,
   .week-row {
     grid-template-columns: 1fr;
@@ -1699,10 +1814,15 @@ select:focus {
   .field-row,
   .transcript-toolbar,
   .analysis-toolbar,
+  .surface-toolbar,
   .detail-header,
   .topline {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .topline-actions {
+    justify-content: space-between;
   }
 
   .toolbar-controls {

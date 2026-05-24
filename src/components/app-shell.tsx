@@ -1,7 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { BarChart3, Camera, FileVideo2, Mic2, PlusCircle, Waves } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  BarChart3,
+  Camera,
+  FileVideo2,
+  KeyRound,
+  LoaderCircle,
+  LockKeyhole,
+  LockKeyholeOpen,
+  LogOut,
+  Mic2,
+  PlusCircle,
+  RefreshCw,
+  Waves,
+} from "lucide-react";
 import {
   DashboardOverview,
   type SessionClassifier,
@@ -16,6 +29,14 @@ import { defaultAiSettings, defaultDriveSettings } from "@/lib/ai-defaults";
 import type { AiSettingsStatus, DriveSettingsStatus, VideoEntry } from "@/types/video";
 
 type AppTab = "overview" | "sessions" | "detail" | "create";
+
+type AccessStatus = {
+  accessConfigured: boolean;
+  granted: boolean;
+  remote: boolean;
+  remoteWritesEnabled: boolean;
+  required: boolean;
+};
 
 function sortVideos(videos: VideoEntry[]) {
   return [...videos].sort((a, b) => b.numero - a.numero);
@@ -76,7 +97,9 @@ const fallbackAiSettings: AiSettingsStatus = {
 
 const fallbackDriveSettings: DriveSettingsStatus = {
   ...defaultDriveSettings,
-  credentialsConfigured: false,
+  authMode: "none",
+  oauthConnected: false,
+  writable: false,
   ready: false,
 };
 
@@ -117,6 +140,13 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
   const [classifier, setClassifier] = useState<SessionClassifier>("all");
   const [tagFilter, setTagFilter] = useState("all");
   const [sort, setSort] = useState<SessionSort>("newest");
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState("");
+  const [accessStatus, setAccessStatus] = useState<AccessStatus | null>(null);
+  const [accessSecret, setAccessSecret] = useState("");
+  const [accessSaving, setAccessSaving] = useState(false);
+  const [accessMessage, setAccessMessage] = useState("");
+  const lastRefreshAtRef = useRef(0);
 
   const availableTags = useMemo(
     () => [...new Set(videos.flatMap((video) => video.etiquetas))].sort((a, b) => a.localeCompare(b)),
@@ -157,6 +187,16 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
     return sortVideos(videos.filter((video) => video.numero < selected.numero))[0] ?? null;
   }, [selected, videos]);
 
+  const refreshAccessStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/access/session", { cache: "no-store" });
+      const payload = (await response.json()) as AccessStatus;
+      setAccessStatus(payload);
+    } catch {
+      setAccessStatus(null);
+    }
+  }, []);
+
   function upsertEntry(entry: VideoEntry) {
     setVideos((current) => {
       const exists = current.some((video) => video.id === entry.id);
@@ -186,6 +226,118 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
     setActiveTab("detail");
   }
 
+  const refreshVideos = useCallback(async ({ quiet = false }: { quiet?: boolean } = {}) => {
+    setRefreshing(true);
+
+    if (!quiet) {
+      setRefreshMessage("");
+    }
+
+    try {
+      const response = await fetch("/api/videos", { cache: "no-store" });
+      const payload = (await response.json()) as { videos?: VideoEntry[]; error?: string };
+
+      if (!response.ok || !payload.videos) {
+        throw new Error(payload.error || "No se pudo refrescar.");
+      }
+
+      const nextVideos = sortVideos(payload.videos);
+      setVideos(nextVideos);
+      setSelectedId((current) => {
+        if (current && nextVideos.some((video) => video.id === current)) {
+          return current;
+        }
+
+        return nextVideos[0]?.id ?? null;
+      });
+      lastRefreshAtRef.current = Date.now();
+
+      if (!quiet) {
+        setRefreshMessage("Sesiones actualizadas");
+      }
+    } catch (error) {
+      if (!quiet) {
+        setRefreshMessage(error instanceof Error ? error.message : "No se pudo refrescar.");
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    lastRefreshAtRef.current = Date.now();
+
+    function refreshWhenReturning() {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      if (Date.now() - lastRefreshAtRef.current < 15000) {
+        return;
+      }
+
+      void refreshVideos({ quiet: true });
+    }
+
+    document.addEventListener("visibilitychange", refreshWhenReturning);
+    window.addEventListener("focus", refreshWhenReturning);
+
+    return () => {
+      document.removeEventListener("visibilitychange", refreshWhenReturning);
+      window.removeEventListener("focus", refreshWhenReturning);
+    };
+  }, [refreshVideos]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void refreshAccessStatus();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [refreshAccessStatus]);
+
+  async function unlockPersonalAccess(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAccessSaving(true);
+    setAccessMessage("");
+
+    try {
+      const response = await fetch("/api/access/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: accessSecret }),
+      });
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "No se pudo activar el acceso.");
+      }
+
+      setAccessSecret("");
+      setAccessMessage("Acceso personal activo.");
+      await refreshAccessStatus();
+    } catch (error) {
+      setAccessMessage(error instanceof Error ? error.message : "No se pudo activar el acceso.");
+    } finally {
+      setAccessSaving(false);
+    }
+  }
+
+  async function lockPersonalAccess() {
+    setAccessSaving(true);
+    setAccessMessage("");
+
+    try {
+      await fetch("/api/access/session", { method: "DELETE" });
+      setAccessMessage("Acceso cerrado.");
+      await refreshAccessStatus();
+    } catch {
+      setAccessMessage("No se pudo cerrar el acceso.");
+    } finally {
+      setAccessSaving(false);
+    }
+  }
+
   return (
     <main className="app-frame">
       <section className="workspace">
@@ -205,9 +357,76 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
               <p>Practica diaria</p>
               <h1>Registro de presencia en camara</h1>
             </div>
-            <Waves aria-hidden="true" size={28} />
+            <div className="topline-actions">
+              {refreshMessage ? <span>{refreshMessage}</span> : null}
+              <button
+                aria-label="Refrescar sesiones desde Drive"
+                className={`icon-action ${refreshing ? "is-busy" : ""}`}
+                disabled={refreshing}
+                onClick={() => void refreshVideos()}
+                title="Refrescar sesiones"
+                type="button"
+              >
+                {refreshing ? <LoaderCircle aria-hidden="true" size={18} /> : <RefreshCw aria-hidden="true" size={18} />}
+              </button>
+              <Waves aria-hidden="true" size={28} />
+            </div>
           </div>
         </header>
+
+        {accessStatus?.required ? (
+          <section className={`personal-access-panel ${accessStatus.granted ? "is-granted" : ""}`}>
+            <div className="panel-title">
+              {accessStatus.granted ? (
+                <LockKeyholeOpen aria-hidden="true" size={18} />
+              ) : (
+                <LockKeyhole aria-hidden="true" size={18} />
+              )}
+              <div>
+                <h2>Acceso personal</h2>
+                <small>
+                  {accessStatus.granted
+                    ? "Escrituras remotas habilitadas para esta sesion."
+                    : "Introduce la clave privada para guardar cambios."}
+                </small>
+              </div>
+            </div>
+
+            {!accessStatus.remoteWritesEnabled ? (
+              <p className="inline-error">Falta APP_ALLOW_REMOTE_WRITE=true en Vercel.</p>
+            ) : !accessStatus.accessConfigured ? (
+              <p className="inline-error">Falta APP_ACCESS_SECRET en Vercel.</p>
+            ) : accessStatus.granted ? (
+              <button className="secondary-action" disabled={accessSaving} onClick={lockPersonalAccess} type="button">
+                <LogOut aria-hidden="true" size={17} />
+                Cerrar acceso
+              </button>
+            ) : (
+              <form className="personal-access-form" onSubmit={unlockPersonalAccess}>
+                <label>
+                  <span>
+                    <KeyRound aria-hidden="true" size={14} />
+                    Clave privada
+                  </span>
+                  <input
+                    autoComplete="current-password"
+                    onChange={(event) => setAccessSecret(event.target.value)}
+                    type="password"
+                    value={accessSecret}
+                  />
+                </label>
+                <button className="primary-action" disabled={accessSaving || accessSecret.trim().length === 0} type="submit">
+                  {accessSaving ? <LoaderCircle aria-hidden="true" size={17} /> : <LockKeyholeOpen aria-hidden="true" size={17} />}
+                  Entrar
+                </button>
+              </form>
+            )}
+
+            {accessMessage ? (
+              <p className={accessMessage.includes("activo") ? "inline-message" : "inline-error"}>{accessMessage}</p>
+            ) : null}
+          </section>
+        ) : null}
 
         <nav className="space-tabs" aria-label="Espacios de la aplicacion" role="tablist">
           {tabs.map((tab) => {

@@ -16,6 +16,10 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+type VideoPatchRequest = Partial<VideoEntry> & {
+  ifUnmodifiedSince?: string;
+};
+
 export async function GET(_request: Request, context: RouteContext) {
   const { id } = await context.params;
   const entry = await getVideoEntry(id);
@@ -36,8 +40,10 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   try {
     const { id } = await context.params;
-    const body = await readJsonObject<Partial<VideoEntry>>(request);
-    const entry = await updateVideoEntry(id, sanitizeVideoPatch(body));
+    const body = await readJsonObject<VideoPatchRequest>(request);
+    const entry = await updateVideoEntry(id, sanitizeVideoPatch(body), {
+      ifUnmodifiedSince: typeof body.ifUnmodifiedSince === "string" ? body.ifUnmodifiedSince : undefined,
+    });
 
     if (!entry) {
       return NextResponse.json({ error: "Video no encontrado." }, { status: 404 });

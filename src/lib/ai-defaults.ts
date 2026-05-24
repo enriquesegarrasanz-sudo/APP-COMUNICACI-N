@@ -48,6 +48,8 @@ export const defaultAiSettings: AiSettings = deepseekAiSettings;
 
 export const ollamaAnalysisModels = ["qwen3:14b", "qwen3-vl:8b"] as const;
 
+export const defaultDriveFolderId = "1R4TpxFk7ErNwiXQSLZllnvbQ4eBd5MjC";
+
 export function getAiSettingsPreset(providerKind: AiSettings["providerKind"], analysisModel?: string): AiSettings {
   if (providerKind === "ollama") {
     return {
@@ -62,10 +64,8 @@ export function getAiSettingsPreset(providerKind: AiSettings["providerKind"], an
 }
 
 export const defaultDriveSettings: DriveSettings = {
-  enabled: false,
-  folderId: "",
-  serviceAccountEmailEnvVar: "GOOGLE_DRIVE_SERVICE_ACCOUNT_EMAIL",
-  serviceAccountPrivateKeyEnvVar: "GOOGLE_DRIVE_PRIVATE_KEY",
+  enabled: true,
+  folderId: defaultDriveFolderId,
   compressionCrf: 28,
   audioBitrateKbps: 48,
   deleteOriginalAfterProcessing: true,

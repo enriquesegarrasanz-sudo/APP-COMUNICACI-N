@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
   Cloud,
   FolderKey,
-  KeyRound,
+  Link2Off,
   LoaderCircle,
+  LogIn,
   Save,
   SlidersHorizontal,
   Trash2,
@@ -22,14 +23,66 @@ type Props = {
 
 const fallbackDriveSettings: DriveSettingsStatus = {
   ...defaultDriveSettings,
-  credentialsConfigured: false,
+  authMode: "none",
+  oauthConnected: false,
+  writable: false,
   ready: false,
 };
+
+type DriveAuthStatusPayload = {
+  connected: boolean;
+  mode: DriveSettingsStatus["authMode"];
+  writable: boolean;
+};
+
+function readOAuthRedirectMessage(): string {
+  if (typeof window === "undefined") return "";
+  const params = new URLSearchParams(window.location.search);
+  const result = params.get("driveOAuth");
+  if (result === "success") return "Google Drive conectado correctamente.";
+  if (result === "error") {
+    const detail = params.get("detail") || "Error desconocido";
+    return "Error al conectar Google Drive: " + detail;
+  }
+  return "";
+}
+
+let initialRedirectMessage = "";
 
 export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
   const [draft, setDraft] = useState<DriveSettingsStatus>(() => initialSettings ?? fallbackDriveSettings);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(() => {
+    initialRedirectMessage = readOAuthRedirectMessage();
+    return initialRedirectMessage;
+  });
+
+  const refreshOAuthStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/google/oauth/status");
+      const payload = (await response.json()) as DriveAuthStatusPayload;
+      setDraft((current) => ({
+        ...current,
+        oauthConnected: payload.connected,
+        authMode: payload.mode,
+        writable: payload.writable,
+        ready: current.enabled && payload.writable && current.folderId.trim().length > 0,
+      }));
+    } catch {
+      // Silently ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initialRedirectMessage) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    const timer = setTimeout(() => {
+      refreshOAuthStatus();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [refreshOAuthStatus]);
 
   function updateDraft<Key extends keyof DriveSettings>(key: Key, value: DriveSettings[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -61,7 +114,47 @@ export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
     }
   }
 
-  const statusText = draft.ready ? "Drive listo" : draft.enabled ? "Config pendiente" : "Drive pausado";
+  function connectOAuth() {
+    window.location.href = "/api/google/oauth/start";
+  }
+
+  async function disconnectOAuth() {
+    setSaving(true);
+    setMessage("");
+
+    try {
+      await fetch("/api/google/oauth/disconnect", { method: "POST" });
+      setDraft((current) => ({ ...current, authMode: "none", oauthConnected: false, ready: false }));
+      setMessage("Google Drive desconectado.");
+    } catch {
+      setMessage("No se pudo desconectar Google Drive.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const statusText = draft.ready
+    ? "Drive listo"
+    : draft.oauthConnected
+      ? draft.enabled
+        ? "Falta carpeta"
+        : "Drive pausado"
+      : "No conectado";
+  const connectionDetail =
+    draft.authMode === "service-account"
+      ? "Service account conectado"
+      : draft.oauthConnected
+        ? "Google Drive conectado"
+        : "OAuth no conectado";
+  const connectionWarning =
+    draft.authMode === "service-account" && !draft.writable
+      ? "La service account puede leer, pero Google no permite crear archivos sin Shared Drive. Conecta OAuth para subir."
+      : "";
+
+  const messageClass =
+    message.includes("guardada") || message.includes("conectado correctamente")
+      ? "inline-message"
+      : "inline-error";
 
   return (
     <section className="drive-settings-panel" aria-label="Conexion Google Drive">
@@ -73,12 +166,37 @@ export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
         <Cloud aria-hidden="true" size={20} />
       </div>
 
+      {connectionWarning ? <p className="inline-error">{connectionWarning}</p> : null}
+
       <div className="ai-status-row">
-        <span className={draft.ready ? "connection-status is-ready" : "connection-status is-missing"}>
-          {draft.ready ? <CheckCircle2 aria-hidden="true" size={16} /> : <AlertCircle aria-hidden="true" size={16} />}
+        <span className={draft.oauthConnected ? "connection-status is-ready" : "connection-status is-missing"}>
+          {draft.oauthConnected ? (
+            <CheckCircle2 aria-hidden="true" size={16} />
+          ) : (
+            <AlertCircle aria-hidden="true" size={16} />
+          )}
           {statusText}
         </span>
-        <small>{draft.serviceAccountEmailEnvVar}</small>
+        <small>{connectionDetail}</small>
+      </div>
+
+      <div className="setting-toggles">
+        {!draft.oauthConnected ? (
+          <button className="secondary-action" disabled={saving} onClick={connectOAuth} type="button">
+            <LogIn aria-hidden="true" size={17} />
+            Conectar Google Drive
+          </button>
+        ) : draft.authMode === "oauth" ? (
+          <button className="secondary-action" disabled={saving} onClick={disconnectOAuth} type="button">
+            <Link2Off aria-hidden="true" size={17} />
+            Desconectar
+          </button>
+        ) : (
+          <span className="connection-status is-ready">
+            <CheckCircle2 aria-hidden="true" size={16} />
+            Configurado en .env.local
+          </span>
+        )}
       </div>
 
       <div className="setting-toggles">
@@ -115,28 +233,6 @@ export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
 
         <label>
           <span>
-            <KeyRound aria-hidden="true" size={14} />
-            Variable email SA
-          </span>
-          <input
-            value={draft.serviceAccountEmailEnvVar}
-            onChange={(event) => updateDraft("serviceAccountEmailEnvVar", event.target.value)}
-          />
-        </label>
-
-        <label>
-          <span>
-            <KeyRound aria-hidden="true" size={14} />
-            Variable private key
-          </span>
-          <input
-            value={draft.serviceAccountPrivateKeyEnvVar}
-            onChange={(event) => updateDraft("serviceAccountPrivateKeyEnvVar", event.target.value)}
-          />
-        </label>
-
-        <label>
-          <span>
             <SlidersHorizontal aria-hidden="true" size={14} />
             CRF video
           </span>
@@ -161,10 +257,14 @@ export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
         </label>
       </div>
 
-      {message ? <p className={message.includes("guardada") ? "inline-message" : "inline-error"}>{message}</p> : null}
+      {message ? <p className={messageClass}>{message}</p> : null}
 
       <button className="secondary-action" disabled={saving} onClick={saveSettings} type="button">
-        {saving ? <LoaderCircle aria-hidden="true" size={17} /> : <Save aria-hidden="true" size={17} />}
+        {saving ? (
+          <LoaderCircle aria-hidden="true" size={17} />
+        ) : (
+          <Save aria-hidden="true" size={17} />
+        )}
         Guardar Drive
       </button>
     </section>

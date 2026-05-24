@@ -19,6 +19,11 @@ async function runProcess(command: string, args: string[]) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: process.cwd(),
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: process.env.PYTHONIOENCODING || "utf-8",
+        PYTHONUTF8: process.env.PYTHONUTF8 || "1",
+      },
       windowsHide: true,
     });
     let stdout = "";
@@ -36,6 +41,15 @@ async function runProcess(command: string, args: string[]) {
     });
     child.on("error", (error) => {
       clearTimeout(timeout);
+      if ("code" in error && error.code === "ENOENT") {
+        reject(
+          new PublicError(
+            `No se encontro el comando de Whisper "${command}". Configura WHISPER_COMMAND en .env.local.`,
+          ),
+        );
+        return;
+      }
+
       reject(error);
     });
     child.on("close", (code) => {
@@ -50,8 +64,12 @@ async function runProcess(command: string, args: string[]) {
   });
 }
 
+function defaultWhisperCommand() {
+  return process.platform === "win32" ? "py -m whisper" : "whisper";
+}
+
 export async function transcribeWithLocalWhisper(filePath: string) {
-  const commandParts = splitCommand(process.env.WHISPER_COMMAND || "whisper");
+  const commandParts = splitCommand(process.env.WHISPER_COMMAND || defaultWhisperCommand());
 
   if (commandParts.length === 0) {
     throw new PublicError("Configura WHISPER_COMMAND en .env.local.");

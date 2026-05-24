@@ -20,10 +20,6 @@ function sanitizeSettings(body: Partial<DriveSettings>): Partial<DriveSettings> 
       typeof body.deleteOriginalAfterProcessing === "boolean" ? body.deleteOriginalAfterProcessing : undefined,
     enabled: typeof body.enabled === "boolean" ? body.enabled : undefined,
     folderId: typeof body.folderId === "string" ? body.folderId : undefined,
-    serviceAccountEmailEnvVar:
-      typeof body.serviceAccountEmailEnvVar === "string" ? body.serviceAccountEmailEnvVar : undefined,
-    serviceAccountPrivateKeyEnvVar:
-      typeof body.serviceAccountPrivateKeyEnvVar === "string" ? body.serviceAccountPrivateKeyEnvVar : undefined,
   };
 }
 

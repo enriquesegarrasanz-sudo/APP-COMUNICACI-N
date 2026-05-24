@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.production
+*.gserviceaccount.json
+app-speaking-*.json
 
 # Dependencias
 node_modules/
@@ -10,10 +12,13 @@ node_modules/
 .next/
 out/
 build/
+tsconfig.tsbuildinfo
 
 # Datos locales generados por la app
 data/app.json
 data/transcripts/
+data/worker-cache/
+data/google-drive-token.json
 public/uploads/
 
 # Logs
@@ -23,7 +28,11 @@ npm-debug.log*
 # QA artifacts
 .playwright-cli/
 output/playwright/
+playwright-report/
+test-results/
 
 # Sistema operativo
 .DS_Store
 Thumbs.db
+
+.vercel

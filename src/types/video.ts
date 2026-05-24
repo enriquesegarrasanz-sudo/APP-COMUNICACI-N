@@ -14,9 +14,13 @@ export type AiProviderKind =
 
 export type AiAuthMode = "bearer" | "x-api-key" | "query-key" | "none";
 
-export type VideoProcessingStatus = "ready" | "error" | "skipped";
+export type VideoProcessingStatus = "pending" | "ready" | "error" | "skipped";
 
-export type DriveUploadStatus = "disabled" | "uploaded" | "error" | "skipped";
+export type DriveUploadStatus = "pending" | "uploading" | "disabled" | "uploaded" | "error" | "skipped";
+
+export type StorageDriverName = "local" | "drive";
+
+export type WorkerStatus = "idle" | "pending" | "processing" | "done" | "error";
 
 export type AiSettings = {
   providerKind: AiProviderKind;
@@ -45,8 +49,6 @@ export type AiSettingsStatus = AiSettings & {
 export type DriveSettings = {
   enabled: boolean;
   folderId: string;
-  serviceAccountEmailEnvVar: string;
-  serviceAccountPrivateKeyEnvVar: string;
   compressionCrf: number;
   audioBitrateKbps: number;
   deleteOriginalAfterProcessing: boolean;
@@ -54,7 +56,9 @@ export type DriveSettings = {
 };
 
 export type DriveSettingsStatus = DriveSettings & {
-  credentialsConfigured: boolean;
+  oauthConnected: boolean;
+  authMode?: "oauth" | "service-account" | "none";
+  writable?: boolean;
   ready: boolean;
 };
 
@@ -111,9 +115,21 @@ export type VideoEntry = {
   driveStatus?: DriveUploadStatus;
   driveFileId?: string;
   driveFileName?: string;
+  driveFolderId?: string;
+  driveSessionFolderId?: string;
+  driveSessionJsonFileId?: string;
+  driveOriginalFileId?: string;
+  driveCompressedFileId?: string;
+  driveAudioFileId?: string;
+  driveTranscriptFileId?: string;
+  driveAnalysisFileId?: string;
   driveWebViewLink?: string;
   driveError?: string;
   driveUploadedAt?: string;
+  storageDriver?: StorageDriverName;
+  workerStatus?: WorkerStatus;
+  workerError?: string;
+  workerUpdatedAt?: string;
   notasMeGusto: string;
   notasMejorar: string;
   transcript: string;

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createVideoEntry, listVideoEntries } from "@/lib/storage";
+import { createVideoEntry, isDriveStorageDriver, listVideoEntries } from "@/lib/storage";
 import {
   logUnexpectedError,
   publicErrorMessage,
@@ -20,6 +20,13 @@ export async function POST(request: Request) {
 
   if (blocked) {
     return blocked;
+  }
+
+  if (isDriveStorageDriver()) {
+    return NextResponse.json(
+      { error: "En modo Drive, usa /api/drive/upload-session para no enviar el binario al servidor." },
+      { status: 409 },
+    );
   }
 
   try {
