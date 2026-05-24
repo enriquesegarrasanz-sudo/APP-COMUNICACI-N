@@ -531,9 +531,9 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
         <div className="video-surface">
           {mediaSrc ? (
             currentMediaKind === "audio" ? (
-              <audio controls src={mediaSrc} />
+              <audio controls preload="none" src={mediaSrc} />
             ) : (
-              <video controls src={mediaSrc} />
+              <video controls preload="none" src={mediaSrc} />
             )
           ) : (
             <div className="video-placeholder">

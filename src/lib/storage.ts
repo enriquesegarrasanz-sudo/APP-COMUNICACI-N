@@ -76,6 +76,8 @@ const allowedMediaExtensions = new Set([
 const audioExtensions = new Set([".aac", ".m4a", ".mp3", ".ogg", ".wav"]);
 
 let databaseQueue = Promise.resolve();
+const driveSettingsCacheTtlMs = 30_000;
+const driveVideoEntriesCacheTtlMs = 15_000;
 
 type DriveIndex = {
   sessions: Array<{ id: string; numero: number; updatedAt: string }>;
@@ -95,6 +97,19 @@ type DriveStructure = {
   pendingJobsFolderId: string;
   doneJobsFolderId: string;
 };
+
+type DriveSettingsRead = {
+  settingsFile: DriveSettingsFile;
+  structure: DriveStructure;
+};
+
+type TimedPromiseCache<T> = {
+  expiresAt: number;
+  promise: Promise<T>;
+};
+
+let driveSettingsFileCache: TimedPromiseCache<DriveSettingsRead> | null = null;
+let driveVideoEntriesCache: TimedPromiseCache<VideoEntry[]> | null = null;
 
 export type DriveWorkerJob = {
   id: string;
@@ -161,6 +176,56 @@ function withDatabaseLock<T>(operation: () => Promise<T>) {
     () => undefined,
   );
   return queued;
+}
+
+function invalidateDriveReadCaches({
+  settings = false,
+  videos = false,
+}: {
+  settings?: boolean;
+  videos?: boolean;
+} = {}) {
+  if (settings) {
+    driveSettingsFileCache = null;
+  }
+
+  if (videos) {
+    driveVideoEntriesCache = null;
+  }
+}
+
+async function cachedDriveRead<T>({
+  cache,
+  fresh,
+  load,
+  ttlMs,
+  update,
+}: {
+  cache: TimedPromiseCache<T> | null;
+  fresh?: boolean;
+  load: () => Promise<T>;
+  ttlMs: number;
+  update: (next: TimedPromiseCache<T> | null) => void;
+}) {
+  const now = Date.now();
+
+  if (!fresh && cache && cache.expiresAt > now) {
+    return cache.promise;
+  }
+
+  const next: TimedPromiseCache<T> = {
+    expiresAt: now + ttlMs,
+    promise: load(),
+  };
+
+  update(next);
+
+  try {
+    return await next.promise;
+  } catch (error) {
+    update(null);
+    throw error;
+  }
 }
 
 async function ensureDatabaseFile() {
@@ -509,6 +574,7 @@ async function writeDriveIndex(structure: DriveStructure, index: DriveIndex) {
     name: "index.json",
     value: { ...index, updatedAt: new Date().toISOString() },
   });
+  invalidateDriveReadCaches({ videos: true });
 }
 
 function defaultDriveSettingsFile(settings: DriveSettings): DriveSettingsFile {
@@ -519,7 +585,7 @@ function defaultDriveSettingsFile(settings: DriveSettings): DriveSettingsFile {
   };
 }
 
-async function readDriveSettingsFile() {
+async function loadDriveSettingsFile(): Promise<DriveSettingsRead> {
   const bootstrap = await getDriveBootstrapSettings();
   const structure = await ensureDriveStructure(bootstrap);
   const stored = await readDriveJsonFileByName<Partial<DriveSettingsFile>>({
@@ -547,6 +613,18 @@ async function readDriveSettingsFile() {
   return { settingsFile, structure };
 }
 
+async function readDriveSettingsFile(options: { fresh?: boolean } = {}) {
+  return cachedDriveRead({
+    cache: driveSettingsFileCache,
+    fresh: options.fresh,
+    load: loadDriveSettingsFile,
+    ttlMs: driveSettingsCacheTtlMs,
+    update: (next) => {
+      driveSettingsFileCache = next;
+    },
+  });
+}
+
 async function writeDriveSettingsFile(patch: {
   aiSettings?: Partial<AiSettings>;
   driveSettings?: Partial<DriveSettings>;
@@ -561,6 +639,7 @@ async function writeDriveSettingsFile(patch: {
   };
 
   await upsertDriveJsonFile({ parentId: structure.appDbFolderId, name: "settings.json", value: next });
+  invalidateDriveReadCaches({ settings: true, videos: true });
   return next;
 }
 
@@ -568,8 +647,8 @@ async function ensureDriveSessionFolder(structure: DriveStructure, id: string) {
   return ensureDriveFolder({ parentId: structure.sessionsFolderId, name: id });
 }
 
-async function readDriveSessionById(id: string): Promise<VideoEntry | null> {
-  const { structure } = await readDriveSettingsFile();
+async function readDriveSessionById(id: string, knownStructure?: DriveStructure): Promise<VideoEntry | null> {
+  const structure = knownStructure ?? (await readDriveSettingsFile()).structure;
   const folder = await findDriveChild({
     parentId: structure.sessionsFolderId,
     name: id,
@@ -736,6 +815,7 @@ async function writeDriveSession(entry: VideoEntry, structure: DriveStructure, s
       storageDriver: "drive",
     },
   });
+  invalidateDriveReadCaches({ videos: true });
 }
 
 async function upsertDriveIndexEntry(entry: VideoEntry, structure: DriveStructure) {
@@ -746,14 +826,26 @@ async function upsertDriveIndexEntry(entry: VideoEntry, structure: DriveStructur
   await writeDriveIndex(structure, { sessions: nextSessions, updatedAt: new Date().toISOString() });
 }
 
-async function listDriveVideoEntries(): Promise<VideoEntry[]> {
+async function loadDriveVideoEntries(): Promise<VideoEntry[]> {
   const { structure } = await readDriveSettingsFile();
   const index = await readDriveIndex(structure);
-  const entries = await Promise.all(index.sessions.map((session) => readDriveSessionById(session.id)));
+  const entries = await Promise.all(index.sessions.map((session) => readDriveSessionById(session.id, structure)));
 
   return entries
     .filter((entry): entry is VideoEntry => Boolean(entry))
     .toSorted((a, b) => b.numero - a.numero);
+}
+
+async function listDriveVideoEntries(options: { fresh?: boolean } = {}): Promise<VideoEntry[]> {
+  return cachedDriveRead({
+    cache: driveVideoEntriesCache,
+    fresh: options.fresh,
+    load: loadDriveVideoEntries,
+    ttlMs: driveVideoEntriesCacheTtlMs,
+    update: (next) => {
+      driveVideoEntriesCache = next;
+    },
+  });
 }
 
 function originalDriveFileName(originalFileName: string, mimeType: string) {
@@ -1116,7 +1208,7 @@ export async function createPendingDriveVideoEntry(input: PendingDriveUploadInpu
 
   return withDatabaseLock(async () => {
     const { structure } = await readDriveSettingsFile();
-    const videos = await listDriveVideoEntries();
+    const videos = await listDriveVideoEntries({ fresh: true });
     const nextNumber = videos.reduce((max, video) => Math.max(max, video.numero), 0) + 1;
     const id = crypto.randomUUID();
     const sessionFolder = await ensureDriveSessionFolder(structure, id);

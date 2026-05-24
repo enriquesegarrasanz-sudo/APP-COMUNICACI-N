@@ -61,7 +61,7 @@ function mediaHeaders(response: Response, mimeType: string) {
 
   headers.set("Content-Type", response.headers.get("content-type") || mimeType);
   headers.set("Accept-Ranges", response.headers.get("accept-ranges") || "bytes");
-  headers.set("Cache-Control", "private, no-store");
+  headers.set("Cache-Control", "private, max-age=300, stale-while-revalidate=60");
 
   return headers;
 }
