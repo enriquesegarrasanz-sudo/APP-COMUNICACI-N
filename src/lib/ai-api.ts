@@ -128,7 +128,8 @@ function buildAnalysisPrompt(entry: VideoEntry, analysis: AnalysisResult, settin
     settings.applicationContext,
     "Objetivo: analizar una transcripcion escrita para detectar patrones de comunicacion oral y progreso frente a camara.",
     "No has escuchado el audio original. No inventes palabras, tono, pausas exactas ni lenguaje corporal que no aparezcan en los datos.",
-    "Evalua claridad, estructura, muletillas, repeticiones, ritmo verbal, cierre, intencion y una practica concreta para la siguiente grabacion.",
+    "Evalua claridad, estructura, muletillas, repeticiones, ritmo verbal, cierre, intencion, diversidad de vocabulario, uso de conectores discursivos, longitud de frases y nivel de seguridad/vacilacion.",
+    "Prioriza una practica concreta y accionable para la siguiente grabacion.",
     "Devuelve solo JSON valido con la forma {\"notes\":[\"...\"]}. Cada nota debe ser breve, especifica, accionable y escrita en espanol natural.",
   ];
 
@@ -160,6 +161,7 @@ function buildAnalysisPrompt(entry: VideoEntry, analysis: AnalysisResult, settin
           heuristicAnalysis: {
             wordCount: analysis.wordCount,
             sentenceCount: analysis.sentenceCount,
+            avgSentenceLength: analysis.avgSentenceLength,
             fillerTotal: analysis.fillerTotal,
             fillerRate: analysis.fillerRate,
             topFillers: analysis.topFillers,
@@ -167,6 +169,13 @@ function buildAnalysisPrompt(entry: VideoEntry, analysis: AnalysisResult, settin
             repeatedPhrases: analysis.repeatedPhrases,
             structureSignals: analysis.structureSignals,
             clarityScore: analysis.clarityScore,
+            uniqueWordCount: analysis.uniqueWordCount,
+            vocabularyDiversity: analysis.vocabularyDiversity,
+            discourseConnectors: analysis.discourseConnectors,
+            connectorVariety: analysis.connectorVariety,
+            confidenceScore: analysis.confidenceScore,
+            assertivenessMarkers: analysis.assertivenessMarkers,
+            hesitationMarkers: analysis.hesitationMarkers,
           },
           transcript: entry.transcript.slice(0, 12000),
         },
