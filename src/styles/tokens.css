@@ -1,37 +1,71 @@
 :root {
-  --camera-paper: #f7fbff;
-  --camera-paper-strong: #ffffff;
-  --camera-mist: #eef6ff;
-  --camera-glass: rgba(255, 255, 255, 0.78);
-  --camera-line: rgba(15, 56, 103, 0.13);
-  --camera-line-strong: rgba(15, 56, 103, 0.22);
-  --camera-ink: #102033;
-  --camera-ink-soft: #506176;
-  --camera-ink-muted: #7b8ba0;
-  --camera-blue: #1f6feb;
-  --camera-blue-deep: #0f4aa2;
-  --camera-blue-soft: #d8eaff;
-  --camera-cyan: #0e9fbd;
-  --camera-aqua: #dff7fb;
-  --camera-coral: #d75f45;
-  --camera-amber: #b57c00;
-  --camera-green: #0f8a65;
-  --camera-radius-xs: 6px;
-  --camera-radius-sm: 8px;
-  --camera-radius-md: 12px;
-  --camera-radius-lg: 18px;
-  --camera-space-1: 4px;
-  --camera-space-2: 8px;
-  --camera-space-3: 12px;
-  --camera-space-4: 16px;
-  --camera-space-5: 20px;
-  --camera-space-6: 24px;
-  --camera-space-8: 32px;
-  --camera-space-10: 40px;
-  --camera-shadow-soft: 0 18px 50px rgba(15, 56, 103, 0.08);
-  --camera-shadow-tight: 0 8px 24px rgba(15, 56, 103, 0.08);
-  --camera-font-body: "Aptos", "Segoe UI", sans-serif;
-  --camera-font-display: "Bahnschrift", "Aptos Display", "Segoe UI", sans-serif;
-  --camera-font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
-}
+  --sp-bg: #f5f7fa;
+  --sp-bg-warm: #faf9f7;
+  --sp-surface: #ffffff;
+  --sp-surface-hover: #f8fafc;
+  --sp-surface-active: #f0f4f8;
+  --sp-glass: rgba(255, 255, 255, 0.82);
+  --sp-glass-strong: rgba(255, 255, 255, 0.94);
 
+  --sp-border: rgba(15, 40, 70, 0.1);
+  --sp-border-strong: rgba(15, 40, 70, 0.18);
+  --sp-border-focus: rgba(79, 114, 235, 0.45);
+
+  --sp-ink: #1a1f2e;
+  --sp-ink-secondary: #4a5568;
+  --sp-ink-muted: #8494a7;
+  --sp-ink-faint: #a8b5c4;
+
+  --sp-accent: #4f72eb;
+  --sp-accent-deep: #3554b9;
+  --sp-accent-soft: #e8efff;
+  --sp-accent-glow: rgba(79, 114, 235, 0.12);
+
+  --sp-teal: #0d9488;
+  --sp-teal-soft: #e6faf8;
+  --sp-coral: #e05a3a;
+  --sp-coral-soft: rgba(224, 90, 58, 0.08);
+  --sp-amber: #d69e2e;
+  --sp-amber-soft: rgba(214, 158, 46, 0.08);
+  --sp-green: #16a34a;
+  --sp-green-soft: rgba(22, 163, 74, 0.08);
+
+  --sp-sidebar-bg: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  --sp-sidebar-ink: rgba(255, 255, 255, 0.75);
+  --sp-sidebar-ink-active: #ffffff;
+  --sp-sidebar-item-hover: rgba(255, 255, 255, 0.06);
+  --sp-sidebar-item-active: rgba(79, 114, 235, 0.2);
+  --sp-sidebar-accent: #818cf8;
+
+  --sp-radius-xs: 6px;
+  --sp-radius-sm: 8px;
+  --sp-radius-md: 12px;
+  --sp-radius-lg: 16px;
+  --sp-radius-xl: 20px;
+  --sp-radius-full: 9999px;
+
+  --sp-space-1: 4px;
+  --sp-space-2: 8px;
+  --sp-space-3: 12px;
+  --sp-space-4: 16px;
+  --sp-space-5: 20px;
+  --sp-space-6: 24px;
+  --sp-space-8: 32px;
+  --sp-space-10: 40px;
+  --sp-space-12: 48px;
+
+  --sp-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --sp-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --sp-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.08);
+  --sp-shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.12);
+
+  --sp-font-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --sp-font-display: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --sp-font-mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", Consolas, monospace;
+
+  --sp-sidebar-width: 260px;
+  --sp-sidebar-collapsed: 72px;
+  --sp-transition-fast: 150ms ease;
+  --sp-transition-normal: 250ms ease;
+  --sp-transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+}

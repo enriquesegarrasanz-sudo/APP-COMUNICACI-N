@@ -6,20 +6,24 @@ import {
   Camera,
   FileVideo2,
   KeyRound,
+  LayoutDashboard,
   LoaderCircle,
   LockKeyhole,
   LockKeyholeOpen,
   LogOut,
   Mic2,
-  PlusCircle,
+  Plus,
   RefreshCw,
-  Waves,
+  Settings,
+  TrendingUp,
+  X,
 } from "lucide-react";
 import {
   DashboardOverview,
   type SessionClassifier,
   type SessionSort,
 } from "@/components/dashboard/DashboardOverview";
+import { ProgressView } from "@/components/dashboard/ProgressView";
 import { SessionBoard } from "@/components/dashboard/SessionBoard";
 import { AiSettingsPanel } from "@/components/settings/AiSettingsPanel";
 import { DriveSettingsPanel } from "@/components/settings/DriveSettingsPanel";
@@ -28,7 +32,7 @@ import { SessionDetail } from "@/components/video-detail/SessionDetail";
 import { defaultAiSettings, defaultDriveSettings } from "@/lib/ai-defaults";
 import type { AiSettingsStatus, DriveSettingsStatus, VideoEntry } from "@/types/video";
 
-type AppTab = "overview" | "sessions" | "detail" | "create";
+type AppView = "dashboard" | "sessions" | "progress" | "settings";
 
 type AccessStatus = {
   accessConfigured: boolean;
@@ -103,39 +107,28 @@ const fallbackDriveSettings: DriveSettingsStatus = {
   ready: false,
 };
 
-const tabs: Array<{ id: AppTab; label: string; description: string; icon: typeof BarChart3 }> = [
-  {
-    id: "overview",
-    label: "Datos",
-    description: "Estadisticas y patrones",
-    icon: BarChart3,
-  },
-  {
-    id: "sessions",
-    label: "Sesiones",
-    description: "Bloques guardados",
-    icon: FileVideo2,
-  },
-  {
-    id: "detail",
-    label: "Sesion abierta",
-    description: "Video, ficha y analisis",
-    icon: Mic2,
-  },
-  {
-    id: "create",
-    label: "Crear",
-    description: "Nueva sesion e IA",
-    icon: PlusCircle,
-  },
+const viewConfig: Array<{ id: AppView; label: string; icon: typeof LayoutDashboard }> = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "sessions", label: "Sesiones", icon: FileVideo2 },
+  { id: "progress", label: "Progreso", icon: TrendingUp },
+  { id: "settings", label: "Ajustes", icon: Settings },
 ];
+
+const viewTitles: Record<AppView, { title: string; subtitle: string }> = {
+  dashboard: { title: "Dashboard", subtitle: "Resumen y metricas de tu practica" },
+  sessions: { title: "Sesiones", subtitle: "Archivo completo de grabaciones" },
+  progress: { title: "Progreso", subtitle: "Evolucion, patrones y tendencias" },
+  settings: { title: "Ajustes", subtitle: "Configuracion de IA y almacenamiento" },
+};
 
 export default function AppShell({ initialAiSettings, initialDriveSettings, initialVideos }: AppShellProps) {
   const [videos, setVideos] = useState(() => sortVideos(initialVideos));
   const [aiSettings, setAiSettings] = useState(() => initialAiSettings ?? fallbackAiSettings);
   const [driveSettings, setDriveSettings] = useState(() => initialDriveSettings ?? fallbackDriveSettings);
   const [selectedId, setSelectedId] = useState<string | null>(() => getInitialSelectedId(initialVideos));
-  const [activeTab, setActiveTab] = useState<AppTab>("overview");
+  const [activeView, setActiveView] = useState<AppView>("dashboard");
+  const [showDetail, setShowDetail] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [query, setQuery] = useState("");
   const [classifier, setClassifier] = useState<SessionClassifier>("all");
   const [tagFilter, setTagFilter] = useState("all");
@@ -210,7 +203,8 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
     setQuery("");
     setClassifier("all");
     setTagFilter("all");
-    setActiveTab("detail");
+    setShowCreateModal(false);
+    setShowDetail(true);
   }
 
   function removeEntry(id: string) {
@@ -219,11 +213,12 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
       setSelectedId(next[0]?.id ?? null);
       return next;
     });
+    setShowDetail(false);
   }
 
   function selectSession(id: string) {
     setSelectedId(id);
-    setActiveTab("detail");
+    setShowDetail(true);
   }
 
   const refreshVideos = useCallback(async ({ quiet = false }: { quiet?: boolean } = {}) => {
@@ -253,11 +248,11 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
       lastRefreshAtRef.current = Date.now();
 
       if (!quiet) {
-        setRefreshMessage("Sesiones actualizadas");
+        setRefreshMessage("Actualizado");
       }
     } catch (error) {
       if (!quiet) {
-        setRefreshMessage(error instanceof Error ? error.message : "No se pudo refrescar.");
+        setRefreshMessage(error instanceof Error ? error.message : "Error al refrescar.");
       }
     } finally {
       setRefreshing(false);
@@ -338,42 +333,126 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
     }
   }
 
-  return (
-    <main className="app-frame">
-      <section className="workspace">
-        <header className="app-header">
-          <div className="brand-mark">
-            <span>
-              <Camera aria-hidden="true" size={22} />
+  function handleBackFromDetail() {
+    setShowDetail(false);
+  }
+
+  const currentViewInfo = viewTitles[activeView];
+
+  if (showDetail && selected) {
+    return (
+      <div className="app-layout">
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <span className="sidebar-brand-icon">
+              <Camera aria-hidden="true" size={20} />
             </span>
-            <div>
-              <strong>APP SPEAKING</strong>
+            <span className="sidebar-brand-text">
+              <strong>SPEAKING</strong>
               <small>camara, voz, progreso</small>
-            </div>
+            </span>
           </div>
 
-          <div className="topline">
-            <div>
-              <p>Practica diaria</p>
-              <h1>Registro de presencia en camara</h1>
+          <nav className="sidebar-nav">
+            <button
+              className="sidebar-item"
+              onClick={handleBackFromDetail}
+              type="button"
+            >
+              <FileVideo2 size={20} />
+              <span>Volver</span>
+            </button>
+          </nav>
+        </aside>
+
+        <main className="main-content">
+          <SessionDetail
+            aiSettings={aiSettings}
+            key={selected.id}
+            previousVideo={previousVideo}
+            video={selected}
+            onDelete={removeEntry}
+            onEntryChange={upsertEntry}
+          />
+        </main>
+
+        <button
+          className="fab-create"
+          onClick={() => setShowCreateModal(true)}
+          type="button"
+        >
+          <Plus size={20} />
+          <span>Nueva sesion</span>
+        </button>
+
+        {showCreateModal ? (
+          <>
+            <div className="modal-backdrop" onClick={() => setShowCreateModal(false)} />
+            <div className="modal-panel">
+              <div className="modal-header">
+                <h2>Nueva sesion</h2>
+                <button className="modal-close" onClick={() => setShowCreateModal(false)} type="button">
+                  <X size={18} />
+                </button>
+              </div>
+              <NewSessionForm onCreated={upsertEntry} />
             </div>
-            <div className="topline-actions">
-              {refreshMessage ? <span>{refreshMessage}</span> : null}
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-layout">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="sidebar-brand-icon">
+            <Camera aria-hidden="true" size={20} />
+          </span>
+          <span className="sidebar-brand-text">
+            <strong>SPEAKING</strong>
+            <small>camara, voz, progreso</small>
+          </span>
+        </div>
+
+        <span className="sidebar-section-label">Menu</span>
+
+        <nav className="sidebar-nav">
+          {viewConfig.map((view) => {
+            const Icon = view.icon;
+
+            return (
               <button
-                aria-label="Refrescar sesiones desde Drive"
-                className={`icon-action ${refreshing ? "is-busy" : ""}`}
-                disabled={refreshing}
-                onClick={() => void refreshVideos()}
-                title="Refrescar sesiones"
+                className={`sidebar-item ${activeView === view.id ? "is-active" : ""}`}
+                key={view.id}
+                onClick={() => setActiveView(view.id)}
                 type="button"
               >
-                {refreshing ? <LoaderCircle aria-hidden="true" size={18} /> : <RefreshCw aria-hidden="true" size={18} />}
+                <Icon size={20} />
+                <span>{view.label}</span>
+                {view.id === "sessions" ? (
+                  <span className="sidebar-item-badge">{videos.length}</span>
+                ) : null}
               </button>
-              <Waves aria-hidden="true" size={28} />
-            </div>
-          </div>
-        </header>
+            );
+          })}
+        </nav>
 
+        <div className="sidebar-footer">
+          <button
+            className={`sidebar-item ${refreshing ? "" : ""}`}
+            disabled={refreshing}
+            onClick={() => void refreshVideos()}
+            type="button"
+          >
+            {refreshing ? <LoaderCircle size={20} /> : <RefreshCw size={20} />}
+            <span>{refreshMessage || "Refrescar"}</span>
+          </button>
+        </div>
+      </aside>
+
+      <main className="main-content">
         {accessStatus?.required ? (
           <section className={`personal-access-panel ${accessStatus.granted ? "is-granted" : ""}`}>
             <div className="panel-title">
@@ -386,8 +465,8 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
                 <h2>Acceso personal</h2>
                 <small>
                   {accessStatus.granted
-                    ? "Escrituras remotas habilitadas para esta sesion."
-                    : "Introduce la clave privada para guardar cambios."}
+                    ? "Escrituras remotas habilitadas."
+                    : "Introduce la clave para guardar cambios."}
                 </small>
               </div>
             </div>
@@ -428,38 +507,17 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
           </section>
         ) : null}
 
-        <nav className="space-tabs" aria-label="Espacios de la aplicacion" role="tablist">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
+        <div className="main-header">
+          <div className="main-header-title">
+            <p>{currentViewInfo.subtitle}</p>
+            <h1>{currentViewInfo.title}</h1>
+          </div>
+          <div className="main-header-actions">
+            {refreshMessage ? <span className="inline-message" style={{ fontSize: "0.8rem" }}>{refreshMessage}</span> : null}
+          </div>
+        </div>
 
-            return (
-              <button
-                aria-controls={`panel-${tab.id}`}
-                aria-selected={activeTab === tab.id}
-                className={`space-tab ${activeTab === tab.id ? "is-active" : ""}`}
-                id={`tab-${tab.id}`}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                role="tab"
-                type="button"
-              >
-                <Icon aria-hidden="true" size={18} />
-                <span>
-                  <strong>{tab.label}</strong>
-                  <small>{tab.description}</small>
-                </span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <section
-          aria-labelledby="tab-overview"
-          className={`tab-panel ${activeTab === "overview" ? "is-active" : ""}`}
-          hidden={activeTab !== "overview"}
-          id="panel-overview"
-          role="tabpanel"
-        >
+        {activeView === "dashboard" ? (
           <DashboardOverview
             availableTags={availableTags}
             classifier={classifier}
@@ -473,49 +531,47 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
             onSortChange={setSort}
             onTagChange={setTagFilter}
           />
-        </section>
+        ) : null}
 
-        <section
-          aria-labelledby="tab-sessions"
-          className={`tab-panel ${activeTab === "sessions" ? "is-active" : ""}`}
-          hidden={activeTab !== "sessions"}
-          id="panel-sessions"
-          role="tabpanel"
-        >
+        {activeView === "sessions" ? (
           <SessionBoard selectedId={selected?.id ?? null} videos={filteredVideos} onSelect={selectSession} />
-        </section>
+        ) : null}
 
-        <section
-          aria-labelledby="tab-detail"
-          className={`tab-panel ${activeTab === "detail" ? "is-active" : ""}`}
-          hidden={activeTab !== "detail"}
-          id="panel-detail"
-          role="tabpanel"
-        >
-          <SessionDetail
-            aiSettings={aiSettings}
-            key={selected?.id ?? "empty-session"}
-            previousVideo={previousVideo}
-            video={selected}
-            onDelete={removeEntry}
-            onEntryChange={upsertEntry}
-          />
-        </section>
+        {activeView === "progress" ? (
+          <ProgressView videos={videos} />
+        ) : null}
 
-        <section
-          aria-labelledby="tab-create"
-          className={`tab-panel ${activeTab === "create" ? "is-active" : ""}`}
-          hidden={activeTab !== "create"}
-          id="panel-create"
-          role="tabpanel"
-        >
-          <div className="compose-grid">
-            <NewSessionForm onCreated={upsertEntry} />
+        {activeView === "settings" ? (
+          <div style={{ display: "grid", gap: "var(--sp-space-5)", maxWidth: 640 }}>
             <DriveSettingsPanel initialSettings={driveSettings} onSaved={setDriveSettings} />
             <AiSettingsPanel initialSettings={aiSettings} onSaved={setAiSettings} />
           </div>
-        </section>
-      </section>
-    </main>
+        ) : null}
+      </main>
+
+      <button
+        className="fab-create"
+        onClick={() => setShowCreateModal(true)}
+        type="button"
+      >
+        <Plus size={20} />
+        <span>Nueva sesion</span>
+      </button>
+
+      {showCreateModal ? (
+        <>
+          <div className="modal-backdrop" onClick={() => setShowCreateModal(false)} />
+          <div className="modal-panel">
+            <div className="modal-header">
+              <h2>Nueva sesion</h2>
+              <button className="modal-close" onClick={() => setShowCreateModal(false)} type="button">
+                <X size={18} />
+              </button>
+            </div>
+            <NewSessionForm onCreated={upsertEntry} />
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
