@@ -9,6 +9,7 @@ import {
   Link2Off,
   LoaderCircle,
   LogIn,
+  PlugZap,
   Save,
   SlidersHorizontal,
   Trash2,
@@ -50,11 +51,18 @@ function readOAuthRedirectMessage(): string {
 export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
   const [draft, setDraft] = useState<DriveSettingsStatus>(() => initialSettings ?? fallbackDriveSettings);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState("");
 
   const refreshOAuthStatus = useCallback(async () => {
     try {
       const response = await fetch("/api/google/oauth/status");
+
+      if (!response.ok) {
+        setMessage("No se pudo comprobar el estado de Google Drive.");
+        return;
+      }
+
       const payload = (await response.json()) as DriveAuthStatusPayload;
       setDraft((current) => ({
         ...current,
@@ -64,7 +72,7 @@ export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
         ready: current.enabled && payload.writable && current.folderId.trim().length > 0,
       }));
     } catch {
-      // Silently ignore
+      setMessage("Sin conexion con el servidor. Comprueba tu red.");
     }
   }, []);
 
@@ -116,6 +124,33 @@ export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
     window.location.href = "/api/google/oauth/start";
   }
 
+  async function testConnection() {
+    setTesting(true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/drive/health");
+      const payload = (await response.json()) as {
+        ok: boolean;
+        error?: string;
+        user?: { displayName?: string; emailAddress?: string };
+        quota?: { usedMb?: number; limitMb?: number | null };
+      };
+
+      if (payload.ok) {
+        const user = payload.user?.emailAddress || payload.user?.displayName || "";
+        const quota = payload.quota?.usedMb != null ? ` | ${payload.quota.usedMb} MB usados` : "";
+        setMessage(`Drive OK${user ? ` (${user})` : ""}${quota}`);
+      } else {
+        setMessage(payload.error || "No se pudo conectar con Drive.");
+      }
+    } catch {
+      setMessage("Sin conexion con el servidor.");
+    } finally {
+      setTesting(false);
+    }
+  }
+
   async function disconnectOAuth() {
     setSaving(true);
     setMessage("");
@@ -150,7 +185,7 @@ export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
       : "";
 
   const messageClass =
-    message.includes("guardada") || message.includes("conectado correctamente")
+    message.includes("guardada") || message.includes("conectado correctamente") || message.startsWith("Drive OK")
       ? "inline-message"
       : "inline-error";
 
@@ -195,6 +230,16 @@ export function DriveSettingsPanel({ initialSettings, onSaved }: Props) {
             Configurado en .env.local
           </span>
         )}
+        {draft.oauthConnected ? (
+          <button className="secondary-action" disabled={testing || saving} onClick={testConnection} type="button">
+            {testing ? (
+              <LoaderCircle aria-hidden="true" size={17} />
+            ) : (
+              <PlugZap aria-hidden="true" size={17} />
+            )}
+            Test conexion
+          </button>
+        ) : null}
       </div>
 
       <div className="setting-toggles">

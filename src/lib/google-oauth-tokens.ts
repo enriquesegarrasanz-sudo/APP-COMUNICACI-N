@@ -85,10 +85,14 @@ export async function isOAuthConnected(): Promise<boolean> {
   return tokens !== null && Boolean(tokens.refresh_token);
 }
 
-/**
- * Returns a valid access token, refreshing automatically if expired.
- * Throws if no tokens are stored or refresh fails.
- */
+const tokenRefreshMaxRetries = 2;
+let inflightRefresh: Promise<string> | null = null;
+
+function tokenRefreshDelay(attempt: number): number {
+  const baseMs = 800 * 2 ** attempt;
+  return baseMs + Math.random() * baseMs * 0.3;
+}
+
 export async function getOAuthAccessToken(): Promise<string> {
   const tokens = await readTokens();
 
@@ -102,6 +106,18 @@ export async function getOAuthAccessToken(): Promise<string> {
     return tokens.access_token;
   }
 
+  if (inflightRefresh) {
+    return inflightRefresh;
+  }
+
+  inflightRefresh = refreshAccessToken(tokens).finally(() => {
+    inflightRefresh = null;
+  });
+
+  return inflightRefresh;
+}
+
+async function refreshAccessToken(tokens: StoredTokens): Promise<string> {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 
@@ -109,42 +125,63 @@ export async function getOAuthAccessToken(): Promise<string> {
     throw new Error("Faltan GOOGLE_OAUTH_CLIENT_ID o GOOGLE_OAUTH_CLIENT_SECRET en .env.local.");
   }
 
-  const response = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: tokens.refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  const payload = (await response.json()) as {
-    access_token?: string;
-    expires_in?: number;
-    error?: string;
-    error_description?: string;
-  };
-
-  if (!response.ok || !payload.access_token) {
-    const detail = payload.error_description || payload.error || `HTTP ${response.status}`;
-
-    if (payload.error === "invalid_grant") {
-      await deleteTokens();
-      throw new Error(`Token de Google expirado o revocado. Reconecta Google Drive. (${detail})`);
+  for (let attempt = 0; attempt <= tokenRefreshMaxRetries; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: tokens.refresh_token,
+          grant_type: "refresh_token",
+        }),
+      });
+    } catch {
+      if (attempt < tokenRefreshMaxRetries) {
+        await new Promise<void>((r) => setTimeout(r, tokenRefreshDelay(attempt)));
+        continue;
+      }
+      throw new Error("No se pudo refrescar el token de Google Drive: error de red.");
     }
 
-    throw new Error(`No se pudo refrescar el token de Google Drive: ${detail}`);
+    const payload = (await response.json()) as {
+      access_token?: string;
+      expires_in?: number;
+      error?: string;
+      error_description?: string;
+    };
+
+    if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+      if (attempt < tokenRefreshMaxRetries) {
+        await new Promise<void>((r) => setTimeout(r, tokenRefreshDelay(attempt)));
+        continue;
+      }
+    }
+
+    if (!response.ok || !payload.access_token) {
+      const detail = payload.error_description || payload.error || `HTTP ${response.status}`;
+
+      if (payload.error === "invalid_grant") {
+        await deleteTokens();
+        throw new Error(`Token de Google expirado o revocado. Reconecta Google Drive. (${detail})`);
+      }
+
+      throw new Error(`No se pudo refrescar el token de Google Drive: ${detail}`);
+    }
+
+    const now = Date.now();
+    const refreshed: StoredTokens = {
+      access_token: payload.access_token,
+      refresh_token: tokens.refresh_token,
+      expiry_date: now + (payload.expires_in ?? 3600) * 1000,
+      scope: tokens.scope,
+    };
+
+    await writeTokens(refreshed);
+    return payload.access_token;
   }
 
-  const refreshed: StoredTokens = {
-    access_token: payload.access_token,
-    refresh_token: tokens.refresh_token,
-    expiry_date: now + (payload.expires_in ?? 3600) * 1000,
-    scope: tokens.scope,
-  };
-
-  await writeTokens(refreshed);
-  return payload.access_token;
+  throw new Error("No se pudo refrescar el token de Google Drive: reintentos agotados.");
 }

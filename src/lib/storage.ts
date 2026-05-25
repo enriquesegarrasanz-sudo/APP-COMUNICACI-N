@@ -181,9 +181,11 @@ function withDatabaseLock<T>(operation: () => Promise<T>) {
 function invalidateDriveReadCaches({
   settings = false,
   videos = false,
+  structure = false,
 }: {
   settings?: boolean;
   videos?: boolean;
+  structure?: boolean;
 } = {}) {
   if (settings) {
     driveSettingsFileCache = null;
@@ -191,6 +193,10 @@ function invalidateDriveReadCaches({
 
   if (videos) {
     driveVideoEntriesCache = null;
+  }
+
+  if (structure) {
+    driveStructureCache = null;
   }
 }
 
@@ -508,7 +514,28 @@ async function getDriveBootstrapSettings() {
   });
 }
 
+const driveStructureCacheTtlMs = 5 * 60_000;
+let driveStructureCache: TimedPromiseCache<DriveStructure> | null = null;
+
 async function ensureDriveStructure(settings?: DriveSettings): Promise<DriveStructure> {
+  const now = Date.now();
+
+  if (driveStructureCache && driveStructureCache.expiresAt > now) {
+    return driveStructureCache.promise;
+  }
+
+  const promise = buildDriveStructure(settings);
+  driveStructureCache = { expiresAt: now + driveStructureCacheTtlMs, promise };
+
+  try {
+    return await promise;
+  } catch (error) {
+    driveStructureCache = null;
+    throw error;
+  }
+}
+
+async function buildDriveStructure(settings?: DriveSettings): Promise<DriveStructure> {
   const bootstrap = settings ?? (await getDriveBootstrapSettings());
   const rootFolderId = driveRootFolderId(bootstrap);
 
@@ -517,10 +544,14 @@ async function ensureDriveStructure(settings?: DriveSettings): Promise<DriveStru
   }
 
   const appDbFolder = await ensureDriveFolder({ parentId: rootFolderId, name: "app-db" });
-  const sessionsFolder = await ensureDriveFolder({ parentId: appDbFolder.fileId, name: "sessions" });
-  const jobsFolder = await ensureDriveFolder({ parentId: appDbFolder.fileId, name: "jobs" });
-  const pendingJobsFolder = await ensureDriveFolder({ parentId: jobsFolder.fileId, name: "pending" });
-  const doneJobsFolder = await ensureDriveFolder({ parentId: jobsFolder.fileId, name: "done" });
+  const [sessionsFolder, jobsFolder] = await Promise.all([
+    ensureDriveFolder({ parentId: appDbFolder.fileId, name: "sessions" }),
+    ensureDriveFolder({ parentId: appDbFolder.fileId, name: "jobs" }),
+  ]);
+  const [pendingJobsFolder, doneJobsFolder] = await Promise.all([
+    ensureDriveFolder({ parentId: jobsFolder.fileId, name: "pending" }),
+    ensureDriveFolder({ parentId: jobsFolder.fileId, name: "done" }),
+  ]);
 
   return {
     appDbFolderId: appDbFolder.fileId,

@@ -9,6 +9,31 @@ const driveUploadBase = "https://www.googleapis.com/upload/drive/v3";
 export const driveFolderMimeType = "application/vnd.google-apps.folder";
 export const driveJsonMimeType = "application/json";
 
+const maxRetries = 3;
+const retryableStatusCodes = new Set([408, 429, 500, 502, 503, 504]);
+
+function retryDelayMs(attempt: number, retryAfterHeader?: string | null): number {
+  if (retryAfterHeader) {
+    const seconds = Number(retryAfterHeader);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.min(seconds * 1000, 60_000);
+    }
+  }
+  const baseMs = 500 * 2 ** attempt;
+  const jitter = Math.random() * baseMs * 0.5;
+  return Math.min(baseMs + jitter, 30_000);
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof TypeError && String(error.message).includes("fetch")) return true;
+  const code = error && typeof error === "object" && "code" in error ? String((error as { code: string }).code) : "";
+  return code === "ECONNRESET" || code === "ECONNREFUSED" || code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT";
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
 type DriveFilePayload = {
   id?: string;
   name?: string;
@@ -67,12 +92,38 @@ async function readDriveResponse<T>(response: Response, fallbackError: string): 
 }
 
 async function driveFetch<T>(url: string, init: RequestInit, fallbackError: string): Promise<T> {
-  const accessToken = await getGoogleDriveAccessToken();
-  const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${accessToken}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const accessToken = await getGoogleDriveAccessToken();
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", `Bearer ${accessToken}`);
 
-  const response = await fetch(url, { ...init, headers });
-  return readDriveResponse<T>(response, fallbackError);
+    let response: Response;
+    try {
+      response = await fetch(url, { ...init, headers });
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableError(error)) {
+        await sleep(retryDelayMs(attempt));
+        continue;
+      }
+      throw new PublicError(
+        `${fallbackError}: error de red (${error instanceof Error ? error.message : "desconocido"})`,
+      );
+    }
+
+    if (retryableStatusCodes.has(response.status) && attempt < maxRetries) {
+      await sleep(retryDelayMs(attempt, response.headers.get("Retry-After")));
+      continue;
+    }
+
+    if (response.status === 401 && attempt < maxRetries) {
+      await sleep(retryDelayMs(0));
+      continue;
+    }
+
+    return readDriveResponse<T>(response, fallbackError);
+  }
+
+  throw new PublicError(`${fallbackError}: reintentos agotados.`);
 }
 
 function jsonMultipartBody(metadata: Record<string, unknown>, content: unknown, boundary: string) {
@@ -288,34 +339,57 @@ export async function createDriveResumableUploadSession({
   parentId: string;
   size: number;
 }) {
-  const accessToken = await getGoogleDriveAccessToken();
   const params = new URLSearchParams({
     fields: "id,name,webViewLink,webContentLink,mimeType,size",
     uploadType: "resumable",
   });
-  const response = await fetch(`${driveUploadBase}/files?${params.toString()}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json; charset=UTF-8",
-      "X-Upload-Content-Length": String(size),
-      "X-Upload-Content-Type": mimeType,
-    },
-    body: JSON.stringify({
-      mimeType,
-      name: fileName,
-      parents: [parentId],
-    }),
-  });
-  const uploadUrl = response.headers.get("location");
 
-  if (!response.ok || !uploadUrl) {
-    const payload = await readDriveResponse<DriveFilePayload>(response, "Google Drive no pudo iniciar la subida");
-    const detail = payload.error?.message || `HTTP ${response.status}`;
-    throw new PublicError(`Google Drive no pudo iniciar la subida: ${detail}`, response.status);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const accessToken = await getGoogleDriveAccessToken();
+
+    let response: Response;
+    try {
+      response = await fetch(`${driveUploadBase}/files?${params.toString()}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Length": String(size),
+          "X-Upload-Content-Type": mimeType,
+        },
+        body: JSON.stringify({
+          mimeType,
+          name: fileName,
+          parents: [parentId],
+        }),
+      });
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableError(error)) {
+        await sleep(retryDelayMs(attempt));
+        continue;
+      }
+      throw new PublicError(
+        `Google Drive no pudo iniciar la subida: error de red (${error instanceof Error ? error.message : "desconocido"})`,
+      );
+    }
+
+    if (retryableStatusCodes.has(response.status) && attempt < maxRetries) {
+      await sleep(retryDelayMs(attempt, response.headers.get("Retry-After")));
+      continue;
+    }
+
+    const uploadUrl = response.headers.get("location");
+
+    if (!response.ok || !uploadUrl) {
+      const payload = await readDriveResponse<DriveFilePayload>(response, "Google Drive no pudo iniciar la subida");
+      const detail = payload.error?.message || `HTTP ${response.status}`;
+      throw new PublicError(`Google Drive no pudo iniciar la subida: ${detail}`, response.status);
+    }
+
+    return uploadUrl;
   }
 
-  return uploadUrl;
+  throw new PublicError("Google Drive no pudo iniciar la subida: reintentos agotados.");
 }
 
 export async function getDriveFileMetadata(fileId: string) {
@@ -329,32 +403,74 @@ export async function getDriveFileMetadata(fileId: string) {
 }
 
 export async function downloadDriveFileToPath({ fileId, filePath }: { fileId: string; filePath: string }) {
-  const accessToken = await getGoogleDriveAccessToken();
-  const response = await fetch(`${driveApiBase}/files/${fileId}?alt=media`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const accessToken = await getGoogleDriveAccessToken();
 
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new PublicError(`Google Drive no pudo descargar el archivo: ${detail || `HTTP ${response.status}`}`);
+    let response: Response;
+    try {
+      response = await fetch(`${driveApiBase}/files/${fileId}?alt=media`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableError(error)) {
+        await sleep(retryDelayMs(attempt));
+        continue;
+      }
+      throw new PublicError(
+        `Google Drive no pudo descargar el archivo: error de red (${error instanceof Error ? error.message : "desconocido"})`,
+      );
+    }
+
+    if (retryableStatusCodes.has(response.status) && attempt < maxRetries) {
+      await sleep(retryDelayMs(attempt, response.headers.get("Retry-After")));
+      continue;
+    }
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new PublicError(`Google Drive no pudo descargar el archivo: ${detail || `HTTP ${response.status}`}`);
+    }
+
+    await fs.writeFile(filePath, Buffer.from(await response.arrayBuffer()));
+    return;
   }
 
-  await fs.writeFile(filePath, Buffer.from(await response.arrayBuffer()));
+  throw new PublicError("Google Drive no pudo descargar el archivo: reintentos agotados.");
 }
 
 export async function fetchDriveFileMedia({ fileId, range }: { fileId: string; range?: string | null }) {
-  const accessToken = await getGoogleDriveAccessToken();
-  const headers = new Headers({ Authorization: `Bearer ${accessToken}` });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const accessToken = await getGoogleDriveAccessToken();
+    const headers = new Headers({ Authorization: `Bearer ${accessToken}` });
 
-  if (range) {
-    headers.set("Range", range);
+    if (range) {
+      headers.set("Range", range);
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${driveApiBase}/files/${fileId}?alt=media`, {
+        method: "GET",
+        headers,
+      });
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableError(error)) {
+        await sleep(retryDelayMs(attempt));
+        continue;
+      }
+      throw error;
+    }
+
+    if (retryableStatusCodes.has(response.status) && attempt < maxRetries) {
+      await sleep(retryDelayMs(attempt, response.headers.get("Retry-After")));
+      continue;
+    }
+
+    return response;
   }
 
-  return fetch(`${driveApiBase}/files/${fileId}?alt=media`, {
-    method: "GET",
-    headers,
-  });
+  throw new PublicError("Google Drive no pudo obtener el archivo: reintentos agotados.");
 }
 
 async function uploadFileToDriveFolder({
@@ -368,7 +484,6 @@ async function uploadFileToDriveFolder({
   mimeType: string;
   parentId: string;
 }): Promise<DriveUploadResult> {
-  const accessToken = await getGoogleDriveAccessToken();
   const fileBuffer = await fs.readFile(filePath);
   const boundary = `app-speaking-${crypto.randomUUID()}`;
   const metadata = {
@@ -387,27 +502,50 @@ async function uploadFileToDriveFolder({
     Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
   ]);
 
-  const response = await fetch(`${driveUploadBase}/files?uploadType=multipart&fields=id,name,webViewLink,webContentLink,mimeType,size`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Length": String(body.length),
-      "Content-Type": `multipart/related; boundary=${boundary}`,
-    },
-    body,
-  });
-  const payload = (await response.json()) as DriveFilePayload;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const accessToken = await getGoogleDriveAccessToken();
 
-  if (!response.ok || !payload.id) {
-    const detail = payload.error?.message || `HTTP ${response.status}`;
-    throw new PublicError(`Google Drive no pudo subir el archivo: ${detail}`);
+    let response: Response;
+    try {
+      response = await fetch(`${driveUploadBase}/files?uploadType=multipart&fields=id,name,webViewLink,webContentLink,mimeType,size`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Length": String(body.length),
+          "Content-Type": `multipart/related; boundary=${boundary}`,
+        },
+        body,
+      });
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableError(error)) {
+        await sleep(retryDelayMs(attempt));
+        continue;
+      }
+      throw new PublicError(
+        `Google Drive no pudo subir el archivo: error de red (${error instanceof Error ? error.message : "desconocido"})`,
+      );
+    }
+
+    if (retryableStatusCodes.has(response.status) && attempt < maxRetries) {
+      await sleep(retryDelayMs(attempt, response.headers.get("Retry-After")));
+      continue;
+    }
+
+    const payload = (await response.json()) as DriveFilePayload;
+
+    if (!response.ok || !payload.id) {
+      const detail = payload.error?.message || `HTTP ${response.status}`;
+      throw new PublicError(`Google Drive no pudo subir el archivo: ${detail}`);
+    }
+
+    return {
+      fileId: payload.id,
+      fileName: payload.name ?? fileName,
+      webViewLink: payload.webViewLink,
+    };
   }
 
-  return {
-    fileId: payload.id,
-    fileName: payload.name ?? fileName,
-    webViewLink: payload.webViewLink,
-  };
+  throw new PublicError("Google Drive no pudo subir el archivo: reintentos agotados.");
 }
 
 export async function upsertFileToDriveFolder({
