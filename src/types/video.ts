@@ -37,6 +37,7 @@ export type AiSettings = {
   ollamaStartCommand: string;
   whisperCommand: string;
   whisperModel: string;
+  whisperLanguage?: string;
   transcriptionEnabled: boolean;
   transcriptAnalysisEnabled: boolean;
   videoAnalysisEnabled: boolean;
@@ -82,6 +83,17 @@ export type StructureSignal = {
   examples: string[];
 };
 
+export type DiscourseConnector = {
+  category: string;
+  count: number;
+  examples: string[];
+};
+
+export type ToneMarker = {
+  phrase: string;
+  count: number;
+};
+
 export type AnalysisResult = {
   wordCount: number;
   sentenceCount: number;
@@ -94,6 +106,14 @@ export type AnalysisResult = {
   clarityScore: number;
   recommendations: string[];
   generatedAt: string;
+  uniqueWordCount?: number;
+  vocabularyDiversity?: number;
+  avgSentenceLength?: number;
+  discourseConnectors?: DiscourseConnector[];
+  connectorVariety?: number;
+  assertivenessMarkers?: ToneMarker[];
+  hesitationMarkers?: ToneMarker[];
+  confidenceScore?: number;
 };
 
 export type VideoEntry = {

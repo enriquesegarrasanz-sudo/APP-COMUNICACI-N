@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BarChart3,
+  BookOpen,
   Brain,
   Cloud,
   FileAudio2,
   FileText,
+  Link2,
   ListChecks,
   LoaderCircle,
   Mic2,
@@ -14,6 +16,7 @@ import {
   RefreshCw,
   Repeat2,
   Save,
+  Shield,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -511,6 +514,22 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
                 <small>Palabras</small>
                 <strong>{formatSigned(comparison.wordCountDelta)}</strong>
               </span>
+              {comparison.vocabularyDiversityDelta !== null ? (
+                <span>
+                  <small>Vocabulario</small>
+                  <strong className={comparisonTone(comparison.vocabularyDiversityDelta)}>
+                    {formatSigned(comparison.vocabularyDiversityDelta, "%")}
+                  </strong>
+                </span>
+              ) : null}
+              {comparison.confidenceDelta !== null ? (
+                <span>
+                  <small>Seguridad</small>
+                  <strong className={comparisonTone(comparison.confidenceDelta)}>
+                    {formatSigned(comparison.confidenceDelta, "%")}
+                  </strong>
+                </span>
+              ) : null}
               {comparison.topFiller ? (
                 <span className="comparison-filler">
                   <small>{comparison.topFiller.phrase}</small>
@@ -713,7 +732,7 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
           <p className="empty-line">El analisis local funciona siempre. Para coaching IA, configura {aiSettings.apiKeyEnvVar}.</p>
         ) : null}
         {message ? <p className={messageIsError ? "inline-error" : "inline-message"}>{message}</p> : null}
-        {currentVideo.transcriptError ? <p className="inline-error">{currentVideo.transcriptError}</p> : null}
+        {!message && currentVideo.transcriptError ? <p className="inline-error">{currentVideo.transcriptError}</p> : null}
 
         {analysis ? (
           <div className="analysis-grid">
@@ -807,6 +826,96 @@ export function SessionDetail({ aiSettings, previousVideo, video, onEntryChange,
                 )}
               </div>
             </article>
+
+            {analysis.vocabularyDiversity !== undefined ? (
+              <article className="analysis-panel">
+                <h3>
+                  <BookOpen aria-hidden="true" size={16} />
+                  Vocabulario
+                </h3>
+                <div className="metric-stack">
+                  <div>
+                    <span>Diversidad</span>
+                    <strong className={analysis.vocabularyDiversity >= 60 ? "is-good" : analysis.vocabularyDiversity < 35 ? "is-alert" : ""}>
+                      {analysis.vocabularyDiversity}%
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Palabras unicas</span>
+                    <strong>{analysis.uniqueWordCount}</strong>
+                  </div>
+                  <div>
+                    <span>Media por frase</span>
+                    <strong>{analysis.avgSentenceLength} pal.</strong>
+                  </div>
+                </div>
+              </article>
+            ) : null}
+
+            {analysis.discourseConnectors ? (
+              <article className="analysis-panel">
+                <h3>
+                  <Link2 aria-hidden="true" size={16} />
+                  Conectores
+                </h3>
+                <div className="signal-list">
+                  {analysis.discourseConnectors.map((connector) => (
+                    <div className={connector.count > 0 ? "structure-row is-on" : "structure-row"} key={connector.category}>
+                      <span>{connector.category}</span>
+                      <strong>{connector.count}</strong>
+                      <small>{connector.examples.length > 0 ? connector.examples.join(", ") : "sin uso"}</small>
+                    </div>
+                  ))}
+                </div>
+                {analysis.connectorVariety !== undefined ? (
+                  <small className="connector-variety-label">
+                    Variedad: {analysis.connectorVariety}/6 categorias
+                  </small>
+                ) : null}
+              </article>
+            ) : null}
+
+            {analysis.confidenceScore !== undefined ? (
+              <article className="analysis-panel">
+                <h3>
+                  <Shield aria-hidden="true" size={16} />
+                  Tono
+                </h3>
+                <div className="tone-meter">
+                  <div className="tone-bar">
+                    <div
+                      className="tone-fill"
+                      style={{ width: `${analysis.confidenceScore}%` }}
+                    />
+                  </div>
+                  <div className="tone-labels">
+                    <span className={analysis.confidenceScore < 40 ? "is-alert" : ""}>Vacilacion</span>
+                    <strong>{analysis.confidenceScore}%</strong>
+                    <span className={analysis.confidenceScore >= 60 ? "is-good" : ""}>Seguridad</span>
+                  </div>
+                </div>
+                {(analysis.hesitationMarkers ?? []).length > 0 ? (
+                  <div className="filler-stack">
+                    {(analysis.hesitationMarkers ?? []).slice(0, 4).map((m) => (
+                      <div className="filler-row" key={m.phrase}>
+                        <span>{m.phrase}</span>
+                        <strong className="is-alert">{m.count}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {(analysis.assertivenessMarkers ?? []).length > 0 ? (
+                  <div className="filler-stack">
+                    {(analysis.assertivenessMarkers ?? []).slice(0, 4).map((m) => (
+                      <div className="filler-row" key={m.phrase}>
+                        <span>{m.phrase}</span>
+                        <strong className="is-good">{m.count}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ) : null}
 
             <article className="analysis-panel wide">
               <h3>Correcciones</h3>

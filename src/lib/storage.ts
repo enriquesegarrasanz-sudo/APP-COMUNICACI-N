@@ -5,6 +5,7 @@ import {
   defaultDriveSettings,
   defaultOllamaStartCommand,
   defaultWhisperCommand,
+  defaultWhisperLanguage,
   defaultWhisperModel,
   getAiSettingsPreset,
 } from "@/lib/ai-defaults";
@@ -357,6 +358,12 @@ function normalizeAiSettings(value: unknown): AiSettings {
       process.env.WHISPER_MODEL || defaultWhisperModel,
       textLimits.model,
       "Modelo de Whisper",
+    ),
+    whisperLanguage: boundedStringOrDefault(
+      input.whisperLanguage,
+      process.env.WHISPER_LANGUAGE || defaultWhisperLanguage,
+      textLimits.model,
+      "Idioma de Whisper",
     ),
     transcriptionEnabled: booleanOrDefault(input.transcriptionEnabled, preset.transcriptionEnabled),
     transcriptAnalysisEnabled: booleanOrDefault(input.transcriptAnalysisEnabled, preset.transcriptAnalysisEnabled),

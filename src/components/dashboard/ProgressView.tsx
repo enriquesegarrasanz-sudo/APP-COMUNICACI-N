@@ -1,8 +1,10 @@
 import {
   Activity,
+  BookOpen,
   CalendarDays,
   CircleDot,
   Gauge,
+  Shield,
 } from "lucide-react";
 import { buildFillerBank, buildWeeklySummaries } from "@/lib/insights";
 import type { VideoEntry } from "@/types/video";
@@ -45,6 +47,14 @@ export function ProgressView({ videos }: Props) {
   const analyzed = sorted.filter((video) => video.analysis);
   const totalWords = analyzed.reduce((total, video) => total + (video.analysis?.wordCount ?? 0), 0);
   const clarity = average(analyzed.map((video) => video.analysis?.clarityScore ?? 0));
+  const vocabDiversities = analyzed
+    .map((v) => v.analysis?.vocabularyDiversity)
+    .filter((v): v is number => v !== undefined);
+  const avgVocabDiversity = average(vocabDiversities);
+  const confidenceScores = analyzed
+    .map((v) => v.analysis?.confidenceScore)
+    .filter((v): v is number => v !== undefined);
+  const avgConfidence = average(confidenceScores);
   const latest = sorted.slice(-6);
   const fillerBank = buildFillerBank(sorted, 8);
   const weeklySummaries = buildWeeklySummaries(sorted, 6);
@@ -74,6 +84,20 @@ export function ProgressView({ videos }: Props) {
             <span>Palabras totales</span>
           </div>
         </article>
+        <article className="metric-tile">
+          <BookOpen aria-hidden="true" size={20} />
+          <div>
+            <strong>{vocabDiversities.length ? `${avgVocabDiversity}%` : "-"}</strong>
+            <span>Vocabulario</span>
+          </div>
+        </article>
+        <article className="metric-tile">
+          <Shield aria-hidden="true" size={20} />
+          <div>
+            <strong>{confidenceScores.length ? `${avgConfidence}%` : "-"}</strong>
+            <span>Seguridad</span>
+          </div>
+        </article>
       </div>
 
       <div className="pattern-grid">
@@ -85,14 +109,19 @@ export function ProgressView({ videos }: Props) {
           {latest.length === 0 ? (
             <p className="empty-line">Todavia no hay sesiones.</p>
           ) : (
-            <ol className="trend-list">
-              {latest.map((video) => (
-                <li key={video.id}>
-                  <span>#{video.numero}</span>
-                  <strong>{video.analysis ? `${video.analysis.clarityScore}%` : "-"}</strong>
-                  <small>{video.tema}</small>
-                </li>
-              ))}
+            <ol className="trend-list trend-list-wide">
+              {latest.map((video) => {
+                const a = video.analysis;
+                return (
+                  <li key={video.id}>
+                    <span>#{video.numero}</span>
+                    <strong>{a ? `${a.clarityScore}%` : "-"}</strong>
+                    <small>{a?.vocabularyDiversity !== undefined ? `Vocab ${a.vocabularyDiversity}%` : "-"}</small>
+                    <small>{a?.confidenceScore !== undefined ? `Segur ${a.confidenceScore}%` : "-"}</small>
+                    <small className="trend-topic">{video.tema}</small>
+                  </li>
+                );
+              })}
             </ol>
           )}
         </article>

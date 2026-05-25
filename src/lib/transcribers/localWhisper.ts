@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { defaultWhisperCommand, defaultWhisperModel } from "@/lib/ai-defaults";
+import { defaultWhisperCommand, defaultWhisperLanguage, defaultWhisperModel } from "@/lib/ai-defaults";
 import { splitCommand } from "@/lib/local-processes";
 import { PublicError } from "@/lib/security";
 import type { AiSettings } from "@/types/video";
@@ -41,7 +41,11 @@ async function runProcess(command: string, args: string[]) {
         return;
       }
 
-      reject(error);
+      reject(
+        new PublicError(
+          `Error al ejecutar Whisper: ${error.message || "error desconocido"}`,
+        ),
+      );
     });
     child.on("close", (code) => {
       clearTimeout(timeout);
@@ -49,7 +53,15 @@ async function runProcess(command: string, args: string[]) {
       if (code === 0) {
         resolve({ stdout, stderr });
       } else {
-        reject(new Error(stderr || stdout || `Whisper termino con codigo ${code}.`));
+        const detail = (stderr || stdout || "").trim();
+        const summary = detail.split("\n").filter(Boolean).slice(-3).join(" | ");
+        reject(
+          new PublicError(
+            summary
+              ? `Whisper fallo (codigo ${code}): ${summary.slice(0, 300)}`
+              : `Whisper termino con codigo ${code}.`,
+          ),
+        );
       }
     });
   });
@@ -66,12 +78,14 @@ export async function transcribeWithLocalWhisper(filePath: string, settings?: Ai
   await fs.mkdir(outputDir, { recursive: true });
 
   const model = settings?.whisperModel || process.env.WHISPER_MODEL || defaultWhisperModel;
+  const language = settings?.whisperLanguage || process.env.WHISPER_LANGUAGE || defaultWhisperLanguage;
+  const isSpanish = language.toLowerCase().startsWith("spa") || language.toLowerCase() === "es";
   const command = commandParts[0];
   const args = [
     ...commandParts.slice(1),
     filePath,
     "--language",
-    "Spanish",
+    language,
     "--model",
     model,
     "--output_format",
@@ -79,6 +93,13 @@ export async function transcribeWithLocalWhisper(filePath: string, settings?: Ai
     "--output_dir",
     outputDir,
   ];
+
+  if (isSpanish) {
+    args.push(
+      "--initial_prompt",
+      "Transcripcion en español de España. Conserva muletillas y expresiones naturales como eh, um, vale, o sea, sabes, bueno, pues, digamos, a ver, vamos.",
+    );
+  }
 
   const result = await runProcess(command, args);
   const transcriptPath = path.join(outputDir, `${path.basename(filePath, path.extname(filePath))}.txt`);

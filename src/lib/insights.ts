@@ -30,6 +30,10 @@ export type SessionComparison = {
   fillerRateDelta: number | null;
   fillerTotalDelta: number | null;
   wordCountDelta: number | null;
+  vocabularyDiversityDelta: number | null;
+  avgSentenceLengthDelta: number | null;
+  confidenceDelta: number | null;
+  connectorVarietyDelta: number | null;
   topFiller: { phrase: string; current: number; previous: number; delta: number } | null;
 };
 
@@ -208,6 +212,10 @@ export function compareSessions(current: VideoEntry, previous: VideoEntry | null
       fillerRateDelta: null,
       fillerTotalDelta: null,
       wordCountDelta: null,
+      vocabularyDiversityDelta: null,
+      avgSentenceLengthDelta: null,
+      confidenceDelta: null,
+      connectorVarietyDelta: null,
       topFiller: null,
     };
   }
@@ -215,12 +223,20 @@ export function compareSessions(current: VideoEntry, previous: VideoEntry | null
   const currentTop = currentAnalysis.topFillers[0];
   const previousTopCount = currentTop ? countFillers(previousAnalysis, currentTop.phrase) : 0;
 
+  function safeDelta(current: number | undefined, prev: number | undefined) {
+    return current !== undefined && prev !== undefined ? current - prev : null;
+  }
+
   return {
     previousNumber: previous.numero,
     clarityDelta: currentAnalysis.clarityScore - previousAnalysis.clarityScore,
     fillerRateDelta: currentAnalysis.fillerRate - previousAnalysis.fillerRate,
     fillerTotalDelta: currentAnalysis.fillerTotal - previousAnalysis.fillerTotal,
     wordCountDelta: currentAnalysis.wordCount - previousAnalysis.wordCount,
+    vocabularyDiversityDelta: safeDelta(currentAnalysis.vocabularyDiversity, previousAnalysis.vocabularyDiversity),
+    avgSentenceLengthDelta: safeDelta(currentAnalysis.avgSentenceLength, previousAnalysis.avgSentenceLength),
+    confidenceDelta: safeDelta(currentAnalysis.confidenceScore, previousAnalysis.confidenceScore),
+    connectorVarietyDelta: safeDelta(currentAnalysis.connectorVariety, previousAnalysis.connectorVariety),
     topFiller: currentTop
       ? {
           phrase: currentTop.phrase,

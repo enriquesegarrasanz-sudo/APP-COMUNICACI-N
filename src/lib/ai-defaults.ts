@@ -8,7 +8,8 @@ export const defaultApplicationContext =
 
 export const defaultOllamaStartCommand = "ollama serve";
 export const defaultWhisperCommand = "whisper";
-export const defaultWhisperModel = "base";
+export const defaultWhisperModel = "small";
+export const defaultWhisperLanguage = "Spanish";
 
 export const deepseekAiSettings: AiSettings = {
   providerKind: "deepseek",
