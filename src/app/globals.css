@@ -2082,6 +2082,281 @@ textarea::placeholder {
 }
 
 /* ═══════════════════════════════════════
+   VOCABULARY GALLERY
+   ═══════════════════════════════════════ */
+
+.vocab-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-space-4);
+}
+
+.vocab-word-list {
+  display: grid;
+  gap: var(--sp-space-1);
+}
+
+.vocab-word-row {
+  display: grid;
+  min-height: 40px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-space-3);
+  border-bottom: 1px solid var(--sp-border);
+  padding: var(--sp-space-1) 0;
+}
+
+.vocab-word-row:last-child {
+  border-bottom: 0;
+}
+
+.vocab-word-main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.vocab-word-row strong {
+  overflow: hidden;
+  color: var(--sp-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+
+.vocab-word-row small {
+  color: var(--sp-ink-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.vocab-word-row b {
+  color: var(--sp-accent-deep);
+  font-family: var(--sp-font-mono);
+  font-size: 0.95rem;
+}
+
+.vocab-word-row em {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-style: normal;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.vocab-phrase-list {
+  display: grid;
+  gap: var(--sp-space-2);
+}
+
+.vocab-phrase-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-space-3);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-radius-sm);
+  padding: var(--sp-space-2) var(--sp-space-3);
+}
+
+.vocab-phrase-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--sp-space-2);
+  flex-wrap: wrap;
+}
+
+.vocab-phrase-main strong {
+  color: var(--sp-ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.vocab-phrase-meta {
+  display: grid;
+  text-align: right;
+  gap: 2px;
+}
+
+.vocab-phrase-meta b {
+  color: var(--sp-accent-deep);
+  font-family: var(--sp-font-mono);
+  font-size: 0.9rem;
+}
+
+.vocab-phrase-meta small {
+  color: var(--sp-ink-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.vocab-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: var(--sp-radius-full);
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.vocab-tag.is-pattern {
+  background: var(--sp-amber-soft);
+  color: var(--sp-amber);
+  border: 1px solid rgba(214, 158, 46, 0.2);
+}
+
+.vocab-tag.is-assertive {
+  background: var(--sp-green-soft);
+  color: var(--sp-green);
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.vocab-tag.is-hesitant {
+  background: var(--sp-coral-soft);
+  color: var(--sp-coral);
+  border: 1px solid rgba(224, 90, 58, 0.2);
+}
+
+.vocab-connector-list {
+  display: grid;
+  gap: var(--sp-space-2);
+}
+
+.vocab-connector-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-space-2);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-radius-sm);
+  padding: var(--sp-space-2) var(--sp-space-3);
+}
+
+.vocab-connector-row.is-strong {
+  border-color: rgba(13, 148, 136, 0.24);
+  background: var(--sp-teal-soft);
+}
+
+.vocab-connector-row.is-moderate {
+  border-color: rgba(214, 158, 46, 0.15);
+  background: var(--sp-amber-soft);
+}
+
+.vocab-connector-row.is-weak {
+  background: var(--sp-surface-hover);
+}
+
+.vocab-connector-row.is-unused {
+  background: var(--sp-surface-hover);
+  opacity: 0.6;
+}
+
+.vocab-connector-main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.vocab-connector-main strong {
+  color: var(--sp-ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.vocab-connector-main small {
+  color: var(--sp-ink-muted);
+  font-size: 0.74rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vocab-connector-stats {
+  display: grid;
+  text-align: right;
+  gap: 2px;
+}
+
+.vocab-connector-stats b {
+  color: var(--sp-accent-deep);
+  font-family: var(--sp-font-mono);
+  font-size: 0.95rem;
+}
+
+.vocab-connector-stats small {
+  color: var(--sp-ink-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.vocab-suggestion {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-space-2);
+  border: 1px solid rgba(79, 114, 235, 0.15);
+  border-radius: var(--sp-radius-sm);
+  background: var(--sp-accent-soft);
+  padding: var(--sp-space-3);
+  color: var(--sp-accent-deep);
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.vocab-suggestion svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--sp-accent);
+}
+
+.vocab-suggestion strong {
+  font-weight: 700;
+}
+
+.vocab-evolution-list {
+  display: grid;
+  gap: var(--sp-space-2);
+}
+
+.vocab-evolution-row {
+  display: grid;
+  grid-template-columns: 44px 56px 90px 90px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-space-2);
+  min-height: 36px;
+  border-bottom: 1px solid var(--sp-border);
+}
+
+.vocab-evolution-row:last-child {
+  border-bottom: 0;
+}
+
+.vocab-evolution-row span {
+  font-family: var(--sp-font-mono);
+  color: var(--sp-ink-muted);
+  font-weight: 600;
+}
+
+.vocab-evolution-row strong {
+  font-family: var(--sp-font-mono);
+  color: var(--sp-accent-deep);
+  font-weight: 700;
+}
+
+.vocab-evolution-row small {
+  color: var(--sp-ink-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════
    UTILITY CLASSES
    ═══════════════════════════════════════ */
 
@@ -2173,7 +2448,8 @@ textarea::placeholder {
   }
 
   .pattern-grid,
-  .session-insight-row {
+  .session-insight-row,
+  .vocab-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2214,6 +2490,15 @@ textarea::placeholder {
   .session-card-grid,
   .week-row {
     grid-template-columns: 1fr;
+  }
+
+  .vocab-evolution-row {
+    grid-template-columns: 44px 56px minmax(0, 1fr);
+  }
+
+  .vocab-evolution-row small:nth-child(3),
+  .vocab-evolution-row small:nth-child(4) {
+    display: none;
   }
 
   .classifier-group {

@@ -1,4 +1,4 @@
-import type { AnalysisResult, VideoEntry } from "@/types/video";
+import type { AnalysisResult, DiscourseConnector, VideoEntry } from "@/types/video";
 
 export type FillerBankItem = {
   phrase: string;
@@ -246,4 +246,215 @@ export function compareSessions(current: VideoEntry, previous: VideoEntry | null
         }
       : null,
   };
+}
+
+export type WordBankItem = {
+  word: string;
+  totalCount: number;
+  sessionCount: number;
+  perThousandWords: number;
+  trend: number;
+};
+
+export function buildWordBank(videos: VideoEntry[], limit = 30): WordBankItem[] {
+  const sorted = sortBySession(videos).filter((video) => video.analysis);
+  const totals = new Map<string, { count: number; sessions: number }>();
+  const totalWords = sorted.reduce((total, video) => total + (video.analysis?.wordCount ?? 0), 0);
+  const latestTerms = new Map<string, number>();
+  const previousTerms = new Map<string, number>();
+  const latest = sorted.at(-1);
+  const previous = sorted.at(-2);
+
+  for (const term of latest?.analysis?.repeatedTerms ?? []) {
+    latestTerms.set(term.term, term.count);
+  }
+
+  for (const term of previous?.analysis?.repeatedTerms ?? []) {
+    previousTerms.set(term.term, term.count);
+  }
+
+  for (const video of sorted) {
+    const seen = new Set<string>();
+
+    for (const term of video.analysis?.repeatedTerms ?? []) {
+      const current = totals.get(term.term) ?? { count: 0, sessions: 0 };
+      current.count += term.count;
+
+      if (!seen.has(term.term)) {
+        current.sessions += 1;
+        seen.add(term.term);
+      }
+
+      totals.set(term.term, current);
+    }
+  }
+
+  return [...totals.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, limit)
+    .map(([word, value]) => ({
+      word,
+      totalCount: value.count,
+      sessionCount: value.sessions,
+      perThousandWords: totalWords > 0 ? Math.round((value.count / totalWords) * 1000) : 0,
+      trend: (latestTerms.get(word) ?? 0) - (previousTerms.get(word) ?? 0),
+    }));
+}
+
+export type PhrasePatternItem = {
+  phrase: string;
+  totalCount: number;
+  sessionCount: number;
+  category: "repeticion" | "seguridad" | "vacilacion";
+};
+
+export function buildPhrasePatterns(videos: VideoEntry[], limit = 20): PhrasePatternItem[] {
+  const sorted = sortBySession(videos).filter((video) => video.analysis);
+  const items: PhrasePatternItem[] = [];
+
+  const repetitions = new Map<string, { count: number; sessions: number }>();
+
+  for (const video of sorted) {
+    const seen = new Set<string>();
+
+    for (const phrase of video.analysis?.repeatedPhrases ?? []) {
+      const current = repetitions.get(phrase.term) ?? { count: 0, sessions: 0 };
+      current.count += phrase.count;
+
+      if (!seen.has(phrase.term)) {
+        current.sessions += 1;
+        seen.add(phrase.term);
+      }
+
+      repetitions.set(phrase.term, current);
+    }
+  }
+
+  for (const [phrase, value] of repetitions) {
+    items.push({ phrase, totalCount: value.count, sessionCount: value.sessions, category: "repeticion" });
+  }
+
+  const assertive = new Map<string, { count: number; sessions: number }>();
+
+  for (const video of sorted) {
+    const seen = new Set<string>();
+
+    for (const marker of video.analysis?.assertivenessMarkers ?? []) {
+      const current = assertive.get(marker.phrase) ?? { count: 0, sessions: 0 };
+      current.count += marker.count;
+
+      if (!seen.has(marker.phrase)) {
+        current.sessions += 1;
+        seen.add(marker.phrase);
+      }
+
+      assertive.set(marker.phrase, current);
+    }
+  }
+
+  for (const [phrase, value] of assertive) {
+    items.push({ phrase, totalCount: value.count, sessionCount: value.sessions, category: "seguridad" });
+  }
+
+  const hesitant = new Map<string, { count: number; sessions: number }>();
+
+  for (const video of sorted) {
+    const seen = new Set<string>();
+
+    for (const marker of video.analysis?.hesitationMarkers ?? []) {
+      const current = hesitant.get(marker.phrase) ?? { count: 0, sessions: 0 };
+      current.count += marker.count;
+
+      if (!seen.has(marker.phrase)) {
+        current.sessions += 1;
+        seen.add(marker.phrase);
+      }
+
+      hesitant.set(marker.phrase, current);
+    }
+  }
+
+  for (const [phrase, value] of hesitant) {
+    items.push({ phrase, totalCount: value.count, sessionCount: value.sessions, category: "vacilacion" });
+  }
+
+  return items.sort((a, b) => b.totalCount - a.totalCount).slice(0, limit);
+}
+
+export type ConnectorProfileItem = {
+  category: string;
+  totalCount: number;
+  sessionCount: number;
+  topExamples: string[];
+};
+
+export function buildConnectorProfile(videos: VideoEntry[]): ConnectorProfileItem[] {
+  const sorted = sortBySession(videos).filter((video) => video.analysis);
+  const categories = new Map<string, { count: number; sessions: number; examples: Map<string, number> }>();
+
+  for (const video of sorted) {
+    const seen = new Set<string>();
+
+    for (const connector of video.analysis?.discourseConnectors ?? []) {
+      if (connector.count === 0) {
+        continue;
+      }
+
+      const current = categories.get(connector.category) ?? { count: 0, sessions: 0, examples: new Map() };
+      current.count += connector.count;
+
+      if (!seen.has(connector.category)) {
+        current.sessions += 1;
+        seen.add(connector.category);
+      }
+
+      for (const example of connector.examples) {
+        current.examples.set(example, (current.examples.get(example) ?? 0) + 1);
+      }
+
+      categories.set(connector.category, current);
+    }
+  }
+
+  const allCategories = ["causal", "temporal", "contraste", "aditivo", "conclusivo", "ejemplo"];
+
+  return allCategories.map((category) => {
+    const data = categories.get(category);
+
+    if (!data) {
+      return { category, totalCount: 0, sessionCount: 0, topExamples: [] };
+    }
+
+    const topExamples = [...data.examples.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([example]) => example);
+
+    return {
+      category,
+      totalCount: data.count,
+      sessionCount: data.sessions,
+      topExamples,
+    };
+  });
+}
+
+export type VocabEvolutionPoint = {
+  numero: number;
+  tema: string;
+  uniqueWords: number;
+  diversity: number;
+  confidence: number;
+};
+
+export function buildVocabEvolution(videos: VideoEntry[]): VocabEvolutionPoint[] {
+  return sortBySession(videos)
+    .filter((video) => video.analysis)
+    .map((video) => ({
+      numero: video.numero,
+      tema: video.tema,
+      uniqueWords: video.analysis?.uniqueWordCount ?? 0,
+      diversity: video.analysis?.vocabularyDiversity ?? 0,
+      confidence: video.analysis?.confidenceScore ?? 50,
+    }));
 }
