@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   BarChart3,
+  BookOpen,
   Camera,
   FileVideo2,
   KeyRound,
@@ -24,6 +25,7 @@ import {
   type SessionSort,
 } from "@/components/dashboard/DashboardOverview";
 import { ProgressView } from "@/components/dashboard/ProgressView";
+import { VocabularyGallery } from "@/components/dashboard/VocabularyGallery";
 import { SessionBoard } from "@/components/dashboard/SessionBoard";
 import { AiSettingsPanel } from "@/components/settings/AiSettingsPanel";
 import { DriveSettingsPanel } from "@/components/settings/DriveSettingsPanel";
@@ -32,7 +34,7 @@ import { SessionDetail } from "@/components/video-detail/SessionDetail";
 import { defaultAiSettings, defaultDriveSettings } from "@/lib/ai-defaults";
 import type { AiSettingsStatus, DriveSettingsStatus, VideoEntry } from "@/types/video";
 
-type AppView = "dashboard" | "sessions" | "progress" | "settings";
+type AppView = "dashboard" | "sessions" | "progress" | "vocabulary" | "settings";
 
 type AccessStatus = {
   accessConfigured: boolean;
@@ -111,6 +113,7 @@ const viewConfig: Array<{ id: AppView; label: string; icon: typeof LayoutDashboa
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "sessions", label: "Sesiones", icon: FileVideo2 },
   { id: "progress", label: "Progreso", icon: TrendingUp },
+  { id: "vocabulary", label: "Vocabulario", icon: BookOpen },
   { id: "settings", label: "Ajustes", icon: Settings },
 ];
 
@@ -118,6 +121,7 @@ const viewTitles: Record<AppView, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Resumen y metricas de tu practica" },
   sessions: { title: "Sesiones", subtitle: "Archivo completo de grabaciones" },
   progress: { title: "Progreso", subtitle: "Evolucion, patrones y tendencias" },
+  vocabulary: { title: "Vocabulario", subtitle: "Galeria de habitos linguisticos y expresiones" },
   settings: { title: "Ajustes", subtitle: "Configuracion de IA y almacenamiento" },
 };
 
@@ -539,6 +543,10 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
 
         {activeView === "progress" ? (
           <ProgressView videos={videos} />
+        ) : null}
+
+        {activeView === "vocabulary" ? (
+          <VocabularyGallery videos={videos} />
         ) : null}
 
         {activeView === "settings" ? (
