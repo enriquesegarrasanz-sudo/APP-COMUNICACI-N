@@ -1,6 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#1f6feb"/>
-  <path d="M18 24a6 6 0 0 1 6-6h14a6 6 0 0 1 6 6v3l7-4v18l-7-4v3a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V24Z" fill="#ffffff"/>
-  <circle cx="31" cy="32" r="6" fill="#d8eaff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SPEAKING">
+  <defs>
+    <linearGradient id="speakingBars" x1="20" x2="44" y1="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9ec3ff"/>
+      <stop offset="0.52" stop-color="#2f65ef"/>
+      <stop offset="1" stop-color="#0e2f8f"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#f8fbff"/>
+  <path
+    d="M20 17.5h24c6 0 10.5 4.5 10.5 10.5v9c0 6-4.5 10.5-10.5 10.5H31.2l-12.7 5.3 3.2-8.8A10.2 10.2 0 0 1 16.5 35V28c0-6 4.5-10.5 10.5-10.5Z"
+    fill="none"
+    stroke="#0e1e4c"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="4"
+  />
+  <path d="M25 30v4" stroke="url(#speakingBars)" stroke-linecap="round" stroke-width="4"/>
+  <path d="M31 27v10" stroke="url(#speakingBars)" stroke-linecap="round" stroke-width="4"/>
+  <path d="M37 23v18" stroke="url(#speakingBars)" stroke-linecap="round" stroke-width="4"/>
+  <path d="M43 27v10" stroke="url(#speakingBars)" stroke-linecap="round" stroke-width="4"/>
+  <path d="M49 30v4" stroke="url(#speakingBars)" stroke-linecap="round" stroke-width="4"/>
 </svg>
-

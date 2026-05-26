@@ -1,10 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  BarChart3,
   BookOpen,
-  Camera,
   FileVideo2,
   KeyRound,
   LayoutDashboard,
@@ -12,7 +11,6 @@ import {
   LockKeyhole,
   LockKeyholeOpen,
   LogOut,
-  Mic2,
   Plus,
   RefreshCw,
   Settings,
@@ -124,6 +122,28 @@ const viewTitles: Record<AppView, { title: string; subtitle: string }> = {
   vocabulary: { title: "Vocabulario", subtitle: "Galeria de habitos linguisticos y expresiones" },
   settings: { title: "Ajustes", subtitle: "Configuracion de IA y almacenamiento" },
 };
+
+function SidebarBrand() {
+  return (
+    <div className="sidebar-brand">
+      <span className="sidebar-brand-icon">
+        <Image
+          alt=""
+          aria-hidden="true"
+          className="sidebar-brand-logo"
+          height={34}
+          priority
+          src="/brand/speaking-mark.png"
+          width={34}
+        />
+      </span>
+      <span className="sidebar-brand-text">
+        <strong>SPEAKING</strong>
+        <small>camara, voz, progreso</small>
+      </span>
+    </div>
+  );
+}
 
 export default function AppShell({ initialAiSettings, initialDriveSettings, initialVideos }: AppShellProps) {
   const [videos, setVideos] = useState(() => sortVideos(initialVideos));
@@ -347,15 +367,7 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
     return (
       <div className="app-layout">
         <aside className="sidebar">
-          <div className="sidebar-brand">
-            <span className="sidebar-brand-icon">
-              <Camera aria-hidden="true" size={20} />
-            </span>
-            <span className="sidebar-brand-text">
-              <strong>SPEAKING</strong>
-              <small>camara, voz, progreso</small>
-            </span>
-          </div>
+          <SidebarBrand />
 
           <nav className="sidebar-nav">
             <button
@@ -410,15 +422,7 @@ export default function AppShell({ initialAiSettings, initialDriveSettings, init
   return (
     <div className="app-layout">
       <aside className="sidebar">
-        <div className="sidebar-brand">
-          <span className="sidebar-brand-icon">
-            <Camera aria-hidden="true" size={20} />
-          </span>
-          <span className="sidebar-brand-text">
-            <strong>SPEAKING</strong>
-            <small>camara, voz, progreso</small>
-          </span>
-        </div>
+        <SidebarBrand />
 
         <span className="sidebar-section-label">Menu</span>
 

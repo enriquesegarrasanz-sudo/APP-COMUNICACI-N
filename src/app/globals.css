@@ -85,8 +85,17 @@ svg {
   height: 40px;
   place-items: center;
   border-radius: var(--sp-radius-md);
-  background: rgba(129, 140, 248, 0.15);
-  color: var(--sp-sidebar-accent);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #f8fbff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+}
+
+.sidebar-brand-logo {
+  display: block;
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
 }
 
 .sidebar-brand-text {
@@ -98,7 +107,7 @@ svg {
   color: var(--sp-sidebar-ink-active);
   font-size: 0.95rem;
   font-weight: 800;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.14em;
 }
 
 .sidebar-brand-text small {
